@@ -1,7 +1,7 @@
 'use client'
 import { DataManager, Query } from '@syncfusion/ej2-data';
 import { StackPanel, TextElement, DataBinding, HierarchicalTree, DiagramComponent, Inject } from "@syncfusion/ej2-react-diagrams";
-import { data } from './datasource';
+import { data } from '../datasource';
 import { registerLicense } from '@syncfusion/ej2-base';
 
 // Registering Syncfusion license key
