@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "../globals.css";
+import { Box } from "@mui/material";
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 
 export const metadata: Metadata = {
   title: "Connections and Directions",
@@ -14,7 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {children}
+        <AppRouterCacheProvider>
+          <Box sx={{ width: '100vw', height: '100vh' }}>
+            {children}
+          </Box>
+        </AppRouterCacheProvider>
       </body>
     </html>
   );
