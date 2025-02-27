@@ -3,21 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npx serve@latest out",
+    "build-start": "npm run build && npm run start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@emotion/cache": "^11.14.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@joint/core": "^4.1.2",
     "@mui/icons-material": "^6.4.2",
     "@mui/material": "^6.4.2",
-    "@syncfusion/ej2": "^28.2.3",
-    "@syncfusion/ej2-react-diagrams": "^28.2.3",
+    "@mui/material-nextjs": "^6.4.3",
     "next": "15.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-infinite-canvas": "^2.1.2",
+    "react-zoom-pan-pinch": "^3.7.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
