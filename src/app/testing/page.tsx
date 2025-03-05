@@ -1,6 +1,6 @@
 'use client'
 import { Box, Button } from '@mui/material';
-import { dia, shapes } from '@joint/core';
+import { dia, shapes, highlighters, elementTools } from '@joint/core';
 import { useEffect, useRef, useState } from 'react';
 
 import React from "react";
@@ -8,7 +8,7 @@ import React from "react";
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 export default function Home() {
-  const [, setPaper] = useState<dia.Paper>()
+  const [paper, setPaper] = useState<dia.Paper>()
   const [graph, setGraph] = useState<dia.Graph>()
   const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
   const transformWrapperRef = useRef<ReactZoomPanPinchRef>(null)
@@ -26,7 +26,7 @@ export default function Home() {
     const graph = new dia.Graph({}, { cellNamespace: namespace });
     setGraph(graph)
 
-    setPaper(new dia.Paper({
+    const paperObj = new dia.Paper({
       el: document.getElementById('joinjs_graph'),
       model: graph,
       width: width,
@@ -39,20 +39,82 @@ export default function Home() {
       },
       background: { color: '#F5F5F5' },
       cellViewNamespace: namespace
-    }));
+    })
+
+    //This is in charge of highlighting a clicked element, maybe useful
+    paperObj.on('element:pointerclick', (elementView) => {
+      const highlightId = 'my-element-highlight';
+      const isHighlighted = highlighters.mask.get(elementView, highlightId);
+
+      if (isHighlighted) {
+        highlighters.mask.remove(elementView, highlightId);
+      } else {
+        highlighters.mask.add(elementView, { selector: 'root' }, highlightId, {
+          deep: true,
+          attrs: {
+            'stroke': '#FF4365',
+            'stroke-width': 3
+          }
+        });
+      }
+    });
+
+    paperObj.on('element:mouseenter', function(elementView) {
+      elementView.showTools();
+    });
+
+    paperObj.on('element:mouseleave', function(elementView) {
+      const toolsEl = elementView.el.querySelector('.joint-tools');
+
+      // If tools exist, add a listener to detect when the mouse leaves them
+      if (toolsEl) {
+        const handleMouseEnter = () => {
+          toolsEl.removeEventListener('mouseleave', handleMouseLeave);
+        };
+
+        const handleMouseLeave = () => {
+          elementView.hideTools();
+          toolsEl.removeEventListener('mouseleave', handleMouseLeave);
+          toolsEl.removeEventListener('mouseenter', handleMouseEnter);
+        };
+
+        toolsEl.addEventListener('mouseenter', handleMouseEnter);
+        toolsEl.addEventListener('mouseleave', handleMouseLeave);
+      } else {
+        elementView.hideTools();
+      }
+    });
+
+    setPaper(paperObj)
   }, [])
 
   const addElement = (name: string, shape: dia.Element) => {
-    if (graph) {
+    if (graph && paper) {
+      shape.addTo(graph);
       shape.position(width / 2 - elementWidth / 2, height / 2 - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
+
+      // 1) creating element tools
+      var boundaryTool = new elementTools.Boundary();
+      var removeButton = new elementTools.Remove();
+
+      // 2) creating a tools view
+      var toolsView = new dia.ToolsView({
+        name: 'basic-tools',
+        tools: [boundaryTool, removeButton]
+      });
+
+      // 3) attaching to an element view
+      var elementView = shape.findView(paper);
+      elementView.addTools(toolsView);
+      elementView.hideTools
+
 
       if (shape instanceof shapes.standard.Polygon) {
         shape.attr('body/refPoints', '50,0 100,50 50,100 0,50');
       }
 
-      shape.addTo(graph);
 
     }
   }

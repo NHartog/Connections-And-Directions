@@ -51,8 +51,7 @@ const WelcomePage = () => {
                                     Chen's Notation
                                 </Typography>
                                 <Typography>
-                                    Chens Notation Yet remarkably appearance get him his projection. Diverted endeavor bed peculiar men the not desirous.
-                                    Acuteness abilities ask can offending furnished fulfilled sex.
+                                    Chens Notation llll  llllll lllll lllll llllll lllllll lllllllll ll llll llll lllll llllll lllll lllll ll l lll lll l llll l l l llllllll lll l lllll llll llll ll ll lllll.
                                 </Typography>
                                 <Typography sx={{ marginTop: 2 }}>
                                     Link to learn more.
@@ -65,8 +64,7 @@ const WelcomePage = () => {
                                     Crow's Foot Notation
                                 </Typography>
                                 <Typography>
-                                    Crow's Foot Notation Yet remarkably appearance get him his projection. Diverted endeavor bed peculiar men the not desirous.
-                                    Acuteness abilities ask can offending furnished fulfilled sex.
+                                    Crow's Foot Notation llll  llllll lllll lllll llllll lllllll lllllllll ll llll llll lllll llllll lllll lllll ll l lll lll l llll l l l llllllll lll l lllll llll llll ll ll lllll.
                                 </Typography>
                                 <Typography sx={{ marginTop: 2 }}>
                                     Link to learn more.
