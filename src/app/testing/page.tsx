@@ -2,6 +2,7 @@
 import { Box, Button } from '@mui/material';
 import { dia, shapes, highlighters, elementTools } from '@joint/core';
 import { useEffect, useRef, useState } from 'react';
+import $ from "jquery";
 
 import React from "react";
 
@@ -26,7 +27,7 @@ export default function Home() {
     const graph = new dia.Graph({}, { cellNamespace: namespace });
     setGraph(graph)
 
-    const paperObj = new dia.Paper({
+    const paper = new dia.Paper({
       el: document.getElementById('joinjs_graph'),
       model: graph,
       width: width,
@@ -42,7 +43,7 @@ export default function Home() {
     })
 
     //This is in charge of highlighting a clicked element, maybe useful
-    paperObj.on('element:pointerclick', (elementView) => {
+    paper.on('element:pointerclick', (elementView) => {
       const highlightId = 'my-element-highlight';
       const isHighlighted = highlighters.mask.get(elementView, highlightId);
 
@@ -59,56 +60,56 @@ export default function Home() {
       }
     });
 
-    paperObj.on('element:mouseenter', function(elementView) {
-      elementView.showTools();
-    });
 
-    paperObj.on('element:mouseleave', function(elementView) {
-      const toolsEl = elementView.el.querySelector('.joint-tools');
-
-      // If tools exist, add a listener to detect when the mouse leaves them
-      if (toolsEl) {
-        const handleMouseEnter = () => {
-          toolsEl.removeEventListener('mouseleave', handleMouseLeave);
-        };
-
-        const handleMouseLeave = () => {
-          elementView.hideTools();
-          toolsEl.removeEventListener('mouseleave', handleMouseLeave);
-          toolsEl.removeEventListener('mouseenter', handleMouseEnter);
-        };
-
-        toolsEl.addEventListener('mouseenter', handleMouseEnter);
-        toolsEl.addEventListener('mouseleave', handleMouseLeave);
-      } else {
-        elementView.hideTools();
-      }
-    });
-
-    setPaper(paperObj)
+    setPaper(paper)
   }, [])
 
   const addElement = (name: string, shape: dia.Element) => {
     if (graph && paper) {
-      shape.addTo(graph);
+      //shape.addTo(graph);
       shape.position(width / 2 - elementWidth / 2, height / 2 - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
 
-      // 1) creating element tools
-      var boundaryTool = new elementTools.Boundary();
-      var removeButton = new elementTools.Remove();
+      // 1) Create element tools
+      const boundaryTool = new elementTools.Boundary();
+      const removeButton = new elementTools.Remove();
 
-      // 2) creating a tools view
-      var toolsView = new dia.ToolsView({
+      // 2) Create tools view
+      const toolsView = new dia.ToolsView({
         name: 'basic-tools',
         tools: [boundaryTool, removeButton]
       });
 
-      // 3) attaching to an element view
-      var elementView = shape.findView(paper);
-      elementView.addTools(toolsView);
-      elementView.hideTools
+      shape.addTo(graph)
+      // 3) Attach the tools to the original shape's view
+      const shapeView = shape.findView(paper);
+      shapeView.addTools(toolsView);
+      shapeView.hideTools(); // Hide the tools
+      console.log(toolsView.$el)
+
+
+      // 4) Show tools when mouse enters the original shape
+      shapeView.$el.on('mouseenter', () => {
+        shapeView.showTools() // Ensure tools are shown
+      });
+
+      shapeView.$el.on('mouseleave', () => {
+        rectElement.css('pointer-events', 'all');
+      });
+
+      // 5) Hide tools when mouse leaves the original shape
+      var rectElement = $(toolsView.$el[0].children[0])
+      //rectElement.css('pointer-events', 'auto');
+      rectElement.on('mouseleave', () => {
+        rectElement.css('pointer-events', 'none');
+        shapeView.hideTools(); // Hide the tools
+      });
+
+      removeButton.$el.on('mouseenter', () => {
+        rectElement.css('pointer-events', 'all');
+        shapeView.showTools(); // Hide the tools
+      });
 
 
       if (shape instanceof shapes.standard.Polygon) {
