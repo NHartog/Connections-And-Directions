@@ -1,90 +1,156 @@
 'use client'
-import { DataManager, Query } from '@syncfusion/ej2-data';
-import { StackPanel, TextElement, DataBinding, HierarchicalTree, DiagramComponent, Inject } from "@syncfusion/ej2-react-diagrams";
-import { data } from '../datasource';
-import { registerLicense } from '@syncfusion/ej2-base';
+import { Box, Button } from '@mui/material';
+import { dia, shapes, highlighters, elementTools } from '@joint/core';
+import { useEffect, useRef, useState } from 'react';
+import $ from "jquery";
 
-// Registering Syncfusion license key
-registerLicense(process.env.NEXT_PUBLIC_LICENSE_KEY as string);
+import React from "react";
+
+import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 export default function Home() {
-  let items: DataManager = new DataManager(data as JSON[], new Query().take(7));
+  const [paper, setPaper] = useState<dia.Paper>()
+  const [graph, setGraph] = useState<dia.Graph>()
+  const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
+  const transformWrapperRef = useRef<ReactZoomPanPinchRef>(null)
+  const boxWrapperRef = useRef<HTMLElement>(null)
+  const width = 8000 // in pixels
+  const height = 8000 // in pixels
+  const elementWidth = 150 // in pixels
+  const elementHeight = 50 // in pixels
 
+  //Note, the creation of the paper must be inside the useEffect to allow the div with id "paper" to exist before its initialization
+  useEffect(() => {
+    // create paper
+    const namespace = shapes;
+
+    const graph = new dia.Graph({}, { cellNamespace: namespace });
+    setGraph(graph)
+
+    const paper = new dia.Paper({
+      el: document.getElementById('joinjs_graph'),
+      model: graph,
+      width: width,
+      height: height,
+      gridSize: 10,
+      drawGrid: {
+        color: '#c9c9c9',
+        thickness: 1,
+        name: 'mesh',
+      },
+      background: { color: '#F5F5F5' },
+      cellViewNamespace: namespace
+    })
+
+    //This is in charge of highlighting a clicked element, maybe useful
+    paper.on('element:pointerclick', (elementView) => {
+      const highlightId = 'my-element-highlight';
+      const isHighlighted = highlighters.mask.get(elementView, highlightId);
+
+      if (isHighlighted) {
+        highlighters.mask.remove(elementView, highlightId);
+      } else {
+        highlighters.mask.add(elementView, { selector: 'root' }, highlightId, {
+          deep: true,
+          attrs: {
+            'stroke': '#FF4365',
+            'stroke-width': 3
+          }
+        });
+      }
+    });
+
+
+    setPaper(paper)
+  }, [])
+
+  const addElement = (name: string, shape: dia.Element) => {
+    if (graph && paper) {
+      //shape.addTo(graph);
+      shape.position(width / 2 - elementWidth / 2, height / 2 - elementHeight / 2);
+      shape.resize(elementWidth, elementHeight);
+      shape.attr('label', { text: name });
+
+      // 1) Create element tools
+      const boundaryTool = new elementTools.Boundary();
+      const removeButton = new elementTools.Remove();
+
+      // 2) Create tools view
+      const toolsView = new dia.ToolsView({
+        name: 'basic-tools',
+        tools: [boundaryTool, removeButton]
+      });
+
+      shape.addTo(graph)
+      // 3) Attach the tools to the original shape's view
+      const shapeView = shape.findView(paper);
+      shapeView.addTools(toolsView);
+      shapeView.hideTools(); // Hide the tools
+      console.log(toolsView.$el)
+
+
+      // 4) Show tools when mouse enters the original shape
+      shapeView.$el.on('mouseenter', () => {
+        shapeView.showTools() // Ensure tools are shown
+      });
+
+      shapeView.$el.on('mouseleave', () => {
+        rectElement.css('pointer-events', 'all');
+      });
+
+      // 5) Hide tools when mouse leaves the original shape
+      var rectElement = $(toolsView.$el[0].children[0])
+      //rectElement.css('pointer-events', 'auto');
+      rectElement.on('mouseleave', () => {
+        rectElement.css('pointer-events', 'none');
+        shapeView.hideTools(); // Hide the tools
+      });
+
+      removeButton.$el.on('mouseenter', () => {
+        rectElement.css('pointer-events', 'all');
+        shapeView.showTools(); // Hide the tools
+      });
+
+
+      if (shape instanceof shapes.standard.Polygon) {
+        shape.attr('body/refPoints', '50,0 100,50 50,100 0,50');
+      }
+
+
+    }
+  }
   return (
     <>
-      <h2>Syncfusion® React Diagram Component</h2>
-      <DiagramComponent id="container" height={'450px'} layout={{
-        type: 'HierarchicalTree',
-        margin: {
-          top: 20,
-        },
-
-      }} dataSourceSettings={{
-        id: 'Id',
-        parentId: 'ReportingPerson',
-        dataManager: items,
-      }} getNodeDefaults={(node: any) => {
-        node.height = 50;
-        node.style.fill = '#6BA5D7';
-        node.borderColor = 'white';
-        node.style.strokeColor = 'white';
-        return node;
-      }} getConnectorDefaults={(obj: any) => {
-        obj.style.strokeColor = '#6BA5D7';
-        obj.style.fill = '#6BA5D7';
-        obj.style.strokeWidth = 2;
-        obj.targetDecorator.style.fill = '#6BA5D7';
-        obj.targetDecorator.style.strokeColor = '#6BA5D7';
-        obj.targetDecorator.shape = 'None';
-        obj.type = 'Orthogonal';
-        return obj;
-      }} setNodeTemplate={(obj: any) => {
-        let content = new StackPanel();
-        content.id = obj.id + '_outerstack';
-        content.style.strokeColor = 'darkgreen';
-        content.style.fill = '#6BA5D7';
-        content.orientation = 'Horizontal';
-        content.padding = {
-          left: 5,
-          right: 10,
-          top: 5,
-          bottom: 5,
-        };
-        let innerStack = new StackPanel();
-        innerStack.style.strokeColor = 'none';
-        innerStack.style.fill = '#6BA5D7';
-        innerStack.margin = {
-          left: 5,
-          right: 0,
-          top: 0,
-          bottom: 0,
-        };
-        innerStack.id = obj.id + '_innerstack';
-        let text = new TextElement();
-        text.content = obj.data['Name'];
-        text.style.color = 'white';
-        text.style.strokeColor = 'none';
-        text.style.fill = 'none';
-        text.id = obj.id + '_text1';
-        let desigText = new TextElement();
-        desigText.margin = {
-          left: 0,
-          right: 0,
-          top: 5,
-          bottom: 0,
-        };
-        desigText.content = obj.data['Designation'];
-        desigText.style.color = 'white';
-        desigText.style.strokeColor = 'none';
-        desigText.style.fill = 'none';
-        desigText.style.textWrapping = 'Wrap';
-        desigText.id = obj.id + '_desig';
-        innerStack.children = [text, desigText];
-        content.children = [innerStack];
-        return content;
-      }} >
-        <Inject services={[DataBinding, HierarchicalTree]} />
-      </DiagramComponent>
+      <Box sx={{ position: 'fixed', zIndex: 2 }}>
+        <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
+        <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
+        <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
+        <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
+        <Button onClick={() => addElement('attribute', new shapes.standard.Ellipse())} variant="contained">Add Attribute</Button>
+        <Button onClick={() => addElement('entity', new shapes.standard.Rectangle())} variant="contained">Add Entity</Button>
+        <Button onClick={() => addElement('relationship', new shapes.standard.Polygon())} variant="contained">Add Relationship</Button>
+      </Box>
+      <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
+        <TransformWrapper
+          centerOnInit={true}
+          initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
+          initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
+          doubleClick={{ mode: 'toggle' }}
+          panning={{ disabled: !panningEnabled }}
+          ref={transformWrapperRef}
+        >
+          <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+            <Box id="joinjs_graph"
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest('.joint-element')) {
+                  setPanningEnabled(false); // Disable panning while dragging an element
+                }
+              }}
+              onMouseUp={() => setPanningEnabled(true)} />
+          </TransformComponent>
+        </TransformWrapper>
+      </Box>
     </>
   )
 }
+
