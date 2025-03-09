@@ -7,7 +7,7 @@ const WelcomePage = () => {
     const router = useRouter();
 
     const handleEnterClick = () => {
-        router.push('/testing');
+        router.push('/crows');
     };
 
     return (
