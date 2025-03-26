@@ -1,8 +1,7 @@
 'use client'
 import { Box, Button } from '@mui/material';
-import { dia, shapes, highlighters, elementTools } from '@joint/core';
+import { dia, shapes, highlighters, elementTools, linkTools, util } from '@joint/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import $ from "jquery";
 
 import React from "react";
 
@@ -19,6 +18,47 @@ export default function Home() {
   const height = 8000 // in pixels
   const elementWidth = 150 // in pixels
   const elementHeight = 50 // in pixels
+
+  const singleLine = new shapes.standard.Link(
+    {
+      z: 0,
+      attrs: {
+        line: {
+          stroke: 'black',    // Black line color
+          strokeWidth: 4,     // Line thickness
+          strokeLinejoin: 'round',
+          strokeLinecap: 'round',
+          targetMarker: { type: 'none' },   // No arrowhead at target
+          sourceMarker: { type: 'none' }    // No arrowhead at source
+        }
+      },
+    }
+  );
+  // This will be the double line used in chens
+  const doubleLine = new shapes.standard.DoubleLink(
+    {
+      z: 0,
+      attrs: {
+        line: {
+          stroke: 'white',      // Main line color (white)
+          strokeWidth: 2,       // Thickness of the main line
+          fill: 'none',
+          targetMarker: { type: 'none' },     // Removes arrowhead at target
+          sourceMarker: { type: 'none' }
+        },
+        outline: {
+          stroke: 'black',      // Outline color (black)
+          strokeWidth: 10,       // Thickness of the outline (should be greater than strokeWidth)
+        }
+      },
+      router: {
+        name: 'orthogonal'
+      },
+      connector: {
+        name: 'rounded'
+      }
+    }
+  )
 
   //Note, the creation of the paper must be inside the useEffect to allow the div with id "paper" to exist before its initialization
   useEffect(() => {
@@ -40,11 +80,33 @@ export default function Home() {
         name: 'mesh',
       },
       interactive: true,
-      defaultLink: new shapes.standard.Link({
-        attrs: { line: { stroke: 'black', strokeWidth: 2 } }
-      }),
-      validateConnection: (sourceView, sourceMagnet, targetView, targetMagnet) => {
-        return !!(sourceMagnet && targetMagnet && sourceView.id != targetView.id); // Only allow connections between ports
+      linkPinning: false,
+      snapLinks: { radius: 10 },
+      defaultLink: doubleLine,
+      linkLayer: 0,
+      defaultConnectionPoint: {
+        name: 'boundary',
+        args: {
+          sticky: true,
+          perpendicular: true
+        }
+      },
+      validateConnection: (
+        sourceView,
+        sourceMagnet,
+        targetView,
+        targetMagnet,
+        end
+      ) => {
+        const source = sourceView.model;
+        const target = targetView.model;
+        if (source.isLink() || target.isLink()) return false;
+        if (targetMagnet === sourceMagnet) return false;
+        if (end === 'target' ? targetMagnet : sourceMagnet) {
+          return true;
+        }
+        if (source === target) return false;
+        return end === 'target' ? target.isElement() && !target.hasPorts() : source.isElement() && !source.hasPorts();
       },
       background: { color: '#F5F5F5' },
       cellViewNamespace: namespace
@@ -72,7 +134,7 @@ export default function Home() {
           }
         });
         if (!selectedCells.current.some((cell) => cell.cid == elementView.model.cid)) {
-            selectedCells.current = [...selectedCells.current, elementView.model];
+          selectedCells.current = [...selectedCells.current, elementView.model];
         }
       }
     });
@@ -84,7 +146,7 @@ export default function Home() {
       if (isHighlighted) {
         highlighters.mask.remove(linkView, highlightId);
         if (selectedCells.current.some((cell) => cell.cid == linkView.model.cid)) {
-            selectedCells.current = selectedCells.current.filter(item => item !== linkView.model);;
+          selectedCells.current = selectedCells.current.filter(item => item !== linkView.model);;
         }
       } else {
         highlighters.mask.add(linkView, { selector: 'root' }, highlightId, {
@@ -95,9 +157,39 @@ export default function Home() {
           }
         });
         if (!selectedCells.current.some((cell) => cell.cid == linkView.model.cid)) {
-            selectedCells.current = [...selectedCells.current, linkView.model];
+          selectedCells.current = [...selectedCells.current, linkView.model];
         }
       }
+    });
+
+    const verticesTool = new linkTools.Vertices();
+    const segmentsTool = new linkTools.Segments();
+    const sourceArrowheadTool = new linkTools.SourceArrowhead();
+    const targetArrowheadTool = new linkTools.TargetArrowhead();
+    const boundaryTool = new linkTools.Boundary();
+    const removeButton = new linkTools.Remove();
+
+    const toolsView = new dia.ToolsView({
+      tools: [
+        verticesTool, segmentsTool,
+        sourceArrowheadTool, targetArrowheadTool,
+        boundaryTool, removeButton
+      ]
+    });
+
+    paper.on('link:mouseenter', function(linkView) {
+      linkView.addTools(toolsView);
+    });
+
+    paper.on('link:mouseleave', (linkView) => {
+      linkView.removeTools();
+    });
+    paper.on('element:mouseenter', elementView => {
+      elementView.showTools();
+    });
+
+    paper.on('element:mouseleave', elementView => {
+      elementView.hideTools();
     });
 
 
@@ -132,19 +224,36 @@ export default function Home() {
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
       // Define ports separately
+      const portRadius = 8;
+      const portAttrs = {
+        circle: {
+          cursor: 'crosshair',
+          fill: '#4D64DD',
+          stroke: '#F4F7F6',
+          magnet: 'active',
+          r: portRadius,
+        },
+      };
+
       const ports = {
         groups: {
-          'inputs': {
-            position: { name: 'left' },
-            attrs: { circle: { fill: 'green', magnet: 'passive' } },
-
+          top: {
+            position: 'top',
+            attrs: portAttrs,
           },
-          'outputs': {
-            position: { name: 'right' },
-            attrs: { circle: { fill: 'red', magnet: true } },
-          }
+          bottom: {
+            position: 'bottom',
+            attrs: portAttrs,
+          },
+          right: {
+            position: 'right',
+            attrs: portAttrs,
+          },
+          left: {
+            position: 'left',
+            attrs: portAttrs,
+          },
         },
-        items: [{ group: 'inputs' }, { group: 'outputs' }]
       };
 
       // Apply ports after initialization
@@ -152,12 +261,21 @@ export default function Home() {
 
       // 1) Create element tools
       const boundaryTool = new elementTools.Boundary();
-      const removeButton = new elementTools.Remove();
+      const removeButton = new elementTools.Remove({
+        useModelGeometry: true,
+        x: '10%',
+        y: '50%',
+      });
+      const connectTool = new elementTools.Connect({
+        useModelGeometry: true,
+        x: '90%',
+        y: '50%',
+      })
 
       // 2) Create tools view
       const toolsView = new dia.ToolsView({
         name: 'basic-tools',
-        tools: [boundaryTool, removeButton]
+        tools: [boundaryTool, removeButton, connectTool]
       });
 
       shape.addTo(graph)
@@ -165,29 +283,6 @@ export default function Home() {
       const shapeView = shape.findView(paper);
       shapeView.addTools(toolsView);
       shapeView.hideTools(); // Hide the tools
-
-
-      // 4) Show tools when mouse enters the original shape
-      (shapeView.$el as JQuery).on('mouseenter', () => {
-        shapeView.showTools() // Ensure tools are shown
-      });
-
-      (shapeView.$el as JQuery).on('mouseleave', () => {
-        rectElement.css('pointer-events', 'all');
-      });
-
-      //// 5) Hide tools when mouse leaves the original shape
-      var rectElement = $((toolsView.$el as JQuery)[0].children[0])
-      //rectElement.css('pointer-events', 'auto');
-      rectElement.on('mouseleave', () => {
-        rectElement.css('pointer-events', 'none');
-        shapeView.hideTools(); // Hide the tools
-      });
-
-      (removeButton.$el as JQuery).on('mouseenter', () => {
-        rectElement.css('pointer-events', 'all');
-        shapeView.showTools(); // Hide the tools
-      });
 
 
       if (shape instanceof shapes.standard.Polygon) {
