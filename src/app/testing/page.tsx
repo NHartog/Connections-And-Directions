@@ -1,8 +1,10 @@
 'use client'
-import { Box, Button } from '@mui/material';
+import { Box, Button, SpeedDial, SpeedDialAction, SpeedDialIcon, Stack } from '@mui/material';
 import { dia, shapes, highlighters, elementTools, linkTools, util } from '@joint/core';
+import * as joint from '@joint/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import SaveIcon from "@mui/icons-material/Save";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
 import React from "react";
 
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
@@ -10,14 +12,164 @@ import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "reac
 export default function Home() {
   const [paper, setPaper] = useState<dia.Paper>()
   const [graph, setGraph] = useState<dia.Graph>()
-  const selectedCells = useRef<dia.Cell[]>([])
   const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
+  const [selectionManager, setSelectionManager] = useState<SelectionManager>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const shiftHeld = useRef<boolean>(false)
   const transformWrapperRef = useRef<ReactZoomPanPinchRef>(null)
   const boxWrapperRef = useRef<HTMLElement>(null)
   const width = 8000 // in pixels
   const height = 8000 // in pixels
   const elementWidth = 150 // in pixels
   const elementHeight = 50 // in pixels
+
+  const onImport = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click(); // Opens file dialog
+    }
+  };
+
+  useEffect(() => {
+
+    // Listen for the keydown event to check if Shift is pressed
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Shift') {
+        shiftHeld.current = true
+      }
+    });
+
+    // Listen for the keyup event to check if Shift is released
+    document.addEventListener('keyup', (event) => {
+      if (event.key === 'Shift') {
+        shiftHeld.current = false
+      }
+    });
+  }, [])
+
+  class SelectionManager {
+    private selected: Set<joint.dia.Element> = new Set();
+    private isSelectionDragging = false;
+    private isElementDragging = false;
+    private initialPositions: Map<joint.dia.Cell.ID, { x: number; y: number }> = new Map();
+
+    constructor(private paper: joint.dia.Paper, private graph: joint.dia.Graph) {
+      this.initEvents();
+    }
+
+    private initEvents() {
+      // Rubberband selection start
+      this.paper.on('blank:pointerdown', (event, x, y) => this.startSelectionDragging(x, y));
+
+      // Rubberband selection end
+      this.paper.on('blank:pointerup', () => this.stopSelectionDragging());
+
+      // Element drag start (only after selection dragging is done)
+      this.paper.on('element:pointerdown', (elementView, event) => this.startElementDragging(elementView, event));
+
+      // Element drag move (only moves after selection)
+      this.paper.on('element:pointermove', (elementView, event, x, y) => this.dragElements(elementView, x, y));
+
+      // Element drag stop
+      this.paper.on('element:pointerup', () => this.stopElementDragging());
+    }
+
+    private startSelectionDragging(x: number, y: number) {
+      this.isSelectionDragging = true;
+
+      // Clear previous selection
+      this.clearSelection();
+
+      // Create a temporary selection box
+      const selectionBox = new joint.shapes.standard.Rectangle();
+      selectionBox.position(x, y);
+      selectionBox.resize(1, 1);
+      selectionBox.attr({ body: { fill: 'rgba(0, 0, 255, 0.1)', stroke: 'blue', 'stroke-dasharray': '5,5' } });
+      selectionBox.addTo(this.graph);
+
+      // Update the box size on mouse move
+      this.paper.on('blank:pointermove', (event, newX, newY) => {
+        selectionBox.resize(newX - x, newY - y);
+      });
+
+      // On mouse up, select elements inside the box
+      this.paper.once('blank:pointerup', () => {
+        const bbox = selectionBox.getBBox();
+        this.graph.getElements().forEach((el) => {
+          if (bbox.containsRect(el.getBBox())) {
+            this.addElement(el);
+          }
+        });
+
+        selectionBox.remove();
+        this.isSelectionDragging = false; // Enable dragging after selection
+      });
+    }
+
+    private stopSelectionDragging() {
+      this.isSelectionDragging = false;
+    }
+
+    private startElementDragging(elementView: joint.dia.ElementView, event: joint.dia.Event) {
+      if (this.isSelectionDragging) return; // Prevent dragging while selecting
+
+      const element = elementView.model;
+      this.isElementDragging = true;
+
+      if (!this.selected.has(element)) {
+        this.clearSelection();
+        this.addElement(element);
+      }
+
+      // Store initial positions
+      this.initialPositions.clear();
+      this.selected.forEach((el) => {
+        this.initialPositions.set(el.id, el.position());
+      });
+    }
+
+    private dragElements(elementView: joint.dia.ElementView, x: number, y: number) {
+      if (!this.isElementDragging) return;
+
+      const draggedElement = elementView.model;
+      if (!this.selected.has(draggedElement)) return;
+
+      const initialPosition = this.initialPositions.get(draggedElement.id);
+      if (!initialPosition) return;
+
+      // Offset drag by element width and height
+      const dx = x - initialPosition.x - elementWidth / 2; // Offset by half the width
+      const dy = y - initialPosition.y - elementHeight / 2; // Offset by half the height
+
+      // Move all selected elements
+      this.selected.forEach((el) => {
+        const pos = this.initialPositions.get(el.id);
+        if (pos) {
+          el.position(pos.x + dx, pos.y + dy);
+        }
+      });
+    }
+
+    private stopElementDragging() {
+      this.isElementDragging = false;
+    }
+
+    addElement(element: joint.dia.Element) {
+      this.selected.add(element);
+      element.attr('body/stroke', 'blue'); // Highlight selection
+    }
+
+    clearSelection() {
+      if (!shiftHeld.current) {
+        this.selected.forEach((el) => el.attr('body/stroke', 'black'));
+        this.selected.clear();
+      }
+    }
+
+    getSelectedElements() {
+      return Array.from(this.selected);
+    }
+  }
 
   const singleLine = new shapes.standard.Link(
     {
@@ -32,6 +184,12 @@ export default function Home() {
           sourceMarker: { type: 'none' }    // No arrowhead at source
         }
       },
+      router: {
+        name: 'orthogonal'
+      },
+      connector: {
+        name: 'rounded'
+      }
     }
   );
   // This will be the double line used in chens
@@ -112,55 +270,7 @@ export default function Home() {
       cellViewNamespace: namespace
     })
 
-    //This is in charge of highlighting a clicked element, maybe useful
-    paper.on('element:pointerclick', (elementView) => {
-      const highlightId = 'my-element-highlight';
-      const isHighlighted = highlighters.mask.get(elementView, highlightId);
-
-      if (isHighlighted) {
-        highlighters.mask.remove(elementView, highlightId);
-        console.log("checking inclusion")
-
-        if (selectedCells.current.some((cell) => { console.log(cell.cid, elementView.model.cid); return cell.cid == elementView.model.cid })) {
-          console.log('it does include')
-          selectedCells.current = selectedCells.current.filter(item => item !== elementView.model);
-        }
-      } else {
-        highlighters.mask.add(elementView, { selector: 'root' }, highlightId, {
-          deep: true,
-          attrs: {
-            'stroke': '#FF4365',
-            'stroke-width': 3
-          }
-        });
-        if (!selectedCells.current.some((cell) => cell.cid == elementView.model.cid)) {
-          selectedCells.current = [...selectedCells.current, elementView.model];
-        }
-      }
-    });
-
-    paper.on('link:click', (linkView) => {
-      const highlightId = 'my-element-highlight';
-      const isHighlighted = highlighters.mask.get(linkView, highlightId);
-
-      if (isHighlighted) {
-        highlighters.mask.remove(linkView, highlightId);
-        if (selectedCells.current.some((cell) => cell.cid == linkView.model.cid)) {
-          selectedCells.current = selectedCells.current.filter(item => item !== linkView.model);;
-        }
-      } else {
-        highlighters.mask.add(linkView, { selector: 'root' }, highlightId, {
-          deep: true,
-          attrs: {
-            'stroke': '#FF4365',
-            'stroke-width': 3
-          }
-        });
-        if (!selectedCells.current.some((cell) => cell.cid == linkView.model.cid)) {
-          selectedCells.current = [...selectedCells.current, linkView.model];
-        }
-      }
-    });
+    setSelectionManager(new SelectionManager(paper, graph))
 
     const verticesTool = new linkTools.Vertices();
     const segmentsTool = new linkTools.Segments();
@@ -199,14 +309,16 @@ export default function Home() {
   // Handle delete and backspace key events
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      graph?.removeCells(selectedCells.current)
-      selectedCells.current = []
+      if (selectionManager) {
+        graph?.removeCells(selectionManager?.getSelectedElements())
+        selectionManager?.clearSelection()
+      }
     }
-  }, [selectedCells, graph]);
 
-  useEffect(() => {
-    console.log(selectedCells)
-  }, [selectedCells])
+    if (event.key == 'Escape') {
+      selectionManager?.clearSelection()
+    }
+  }, [selectionManager, graph]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -292,51 +404,138 @@ export default function Home() {
 
     }
   }
+
+
+  function onSave() {
+    // Convert JSON object to string
+    if (!graph) {
+      return;
+    }
+
+    const jsonString = JSON.stringify(graph.toJSON(), null, 2)
+
+    // Create a Blob with JSON data
+    const blob = new Blob([jsonString], { type: "application/json" });
+
+    // Create a downloadable URL
+    const url = URL.createObjectURL(blob);
+
+    // Create an anchor element and trigger download
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "diagram.json"; // File name
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Release the object URL
+    URL.revokeObjectURL(url);
+  }
+
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; // Get the first file
+
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string; // Read file content
+        const json = JSON.parse(text); // Parse JSON
+        console.log(json)
+        if (graph) {
+          graph.fromJSON(json)
+        }
+        console.log("Imported JSON:", json);
+      } catch (error) {
+        console.error("Error parsing JSON:", error);
+      }
+    };
+
+    console.log(file)
+
+    reader.readAsText(file); // Read file as text
+  };
+
   return (
-    <>
-      <Box sx={{ position: 'fixed', zIndex: 2 }}>
-        <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
-        <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
-        <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
-        <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
-        <Button onClick={() => addElement('attribute', new shapes.standard.Ellipse())} variant="contained">Add Attribute</Button>
-        <Button onClick={() => addElement('entity', new shapes.standard.Rectangle())} variant="contained">Add Entity</Button>
-        <Button onClick={() => addElement('relationship', new shapes.standard.Polygon())} variant="contained">Add Relationship</Button>
-      </Box>
-      <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
-        <TransformWrapper
-          centerOnInit={true}
-          initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
-          initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
-          doubleClick={{ mode: 'toggle' }}
-          panning={{ disabled: !panningEnabled }}
-          ref={transformWrapperRef}
-        >
-          <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
-            <Box id="joinjs_graph"
-              onMouseDown={(e) => {
-                const target = e.target as HTMLElement;
-                console.log(target)
-
-                // Check if clicking an element
-                if (target.closest('.joint-element')) {
-                  setPanningEnabled(false); // Disable panning while dragging an element
-                }
-
-                if (target.closest('.joint-link')) {
-                  setPanningEnabled(false);
-                }
-
-                if (target.closest('.joint-tool')) {
-                  setPanningEnabled(false);
-                }
-              }}
-              onMouseUp={() => setPanningEnabled(true)}
+    <Stack direction="row" sx={{ width: '100%', height: '100%' }}>
+      <Box sx={{ width: 'calc(100% - 300px)', height: '100%' }}>
+        <Box sx={{ position: 'fixed', zIndex: 2 }}>
+          <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
+          <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
+          <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
+          <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
+          <Button onClick={() => addElement('attribute', new shapes.standard.Ellipse())} variant="contained">Add Attribute</Button>
+          <Button onClick={() => addElement('entity', new shapes.standard.Rectangle())} variant="contained">Add Entity</Button>
+          <Button onClick={() => addElement('relationship', new shapes.standard.Polygon())} variant="contained">Add Relationship</Button>
+        </Box>
+        <Box sx={{ position: 'fixed', zIndex: 2, bottom: 16, right: 316 }}>
+          <input
+            type="file"
+            accept="application/json"
+            ref={fileInputRef}
+            onChange={handleImport}
+            style={{ display: "none" }}
+          />
+          <SpeedDial
+            ariaLabel="SpeedDial actions"
+            icon={<SpeedDialIcon />}
+          >
+            <SpeedDialAction
+              icon={<SaveIcon />}
+              tooltipTitle="Save"
+              onClick={onSave}
             />
-          </TransformComponent>
-        </TransformWrapper>
+            <SpeedDialAction
+              icon={<FileUploadIcon />}
+              tooltipTitle="Import"
+              onClick={onImport}
+            />
+          </SpeedDial>
+        </Box>
+        <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
+          <TransformWrapper
+            centerOnInit={true}
+            initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
+            initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
+            doubleClick={{ mode: 'toggle' }}
+            panning={{ disabled: !panningEnabled }}
+            ref={transformWrapperRef}
+          >
+            <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+              <Box id="joinjs_graph"
+                onMouseDown={(e) => {
+                  const target = e.target as HTMLElement;
+
+                  // Check if clicking an element
+                  if (target.closest('.joint-element')) {
+                    setPanningEnabled(false); // Disable panning while dragging an element
+                  }
+
+                  if (target.closest('.joint-link')) {
+                    setPanningEnabled(false);
+                  }
+
+                  if (target.closest('.joint-tool')) {
+                    setPanningEnabled(false);
+                  }
+
+                  if (e.button == 0) {
+                    setPanningEnabled(false);
+                  }
+                }}
+                onMouseUp={() => setPanningEnabled(true)}
+              />
+            </TransformComponent>
+          </TransformWrapper>
+        </Box>
       </Box>
-    </>
+      <Box sx={{ backgroundColor: 'red', width: '300px', height: '100%' }}>
+
+      </Box>
+    </Stack>
   )
 }
 
