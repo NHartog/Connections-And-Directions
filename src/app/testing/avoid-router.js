@@ -142,6 +142,10 @@ export class AvoidRouter {
     getAvoidRectFromElement(element) {
         const Avoid = AvoidLib.getInstance();
         const { x, y, width, height } = element.getBBox();
+		// Note: This means the avoid router will not avoid elements with the below id
+		if (element.id == "selectionBBOXElement") {
+			return new Avoid.Rectangle(new Avoid.Point(x, y), 0, 0)
+		}
         return new Avoid.Rectangle(
             new Avoid.Point(x, y),
             new Avoid.Point(x + width, y + height)

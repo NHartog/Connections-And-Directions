@@ -97,6 +97,7 @@ export default function Home() {
       const selectionBox = new joint.shapes.standard.Rectangle();
       selectionBox.position(x, y);
       selectionBox.resize(1, 1);
+      selectionBox.id = "selectionBBOXElement"
       selectionBox.attr({ body: { fill: 'rgba(0, 0, 255, 0.1)', stroke: 'blue', 'stroke-dasharray': '5,5' } });
       selectionBox.addTo(this.graph);
 
@@ -197,9 +198,6 @@ export default function Home() {
           sourceMarker: { type: 'none' }    // No arrowhead at source
         }
       },
-      //router: {
-      //  name: 'orthogonal'
-      //},
       connector: {
         name: 'rounded'
       }
@@ -222,9 +220,6 @@ export default function Home() {
           strokeWidth: 10,       // Thickness of the outline (should be greater than strokeWidth)
         }
       },
-      //router: {
-      //  name: 'orthogonal'
-      //},
       connector: {
         name: 'rounded'
       }
@@ -286,20 +281,10 @@ export default function Home() {
 
     setSelectionManager(new SelectionManager(paper, graph))
 
-    const verticesTool = new linkTools.Vertices();
-    const segmentsTool = new linkTools.Segments();
-    const sourceArrowheadTool = new linkTools.SourceArrowhead();
-    const targetArrowheadTool = new linkTools.TargetArrowhead();
     const boundaryTool = new linkTools.Boundary();
     const removeButton = new linkTools.Remove();
 
-    const toolsView = new dia.ToolsView({
-      tools: [
-        verticesTool, segmentsTool,
-        sourceArrowheadTool, targetArrowheadTool,
-        boundaryTool, removeButton
-      ]
-    });
+    const toolsView = new dia.ToolsView({ tools: [boundaryTool, removeButton] });
 
     paper.on('link:mouseenter', function(linkView) {
       linkView.addTools(toolsView);
@@ -323,6 +308,7 @@ export default function Home() {
       const { command, ...data } = e.data;
       switch (command) {
         case 'routed': {
+          console.log(data)
           const { cells } = data;
           cells.forEach((cell: joint.dia.Link) => {
             const model = graph.getCell(cell.id);
@@ -356,6 +342,11 @@ export default function Home() {
         return;
       }
 
+      if (graph.getElements().find(el => el.id == "selectionBBOXElement")) {
+        console.log("found it")
+        return;
+      }
+
       routerWorker.postMessage([{
         command: 'change',
         cell: cell.toJSON()
@@ -374,6 +365,9 @@ export default function Home() {
     });
 
     graph.on('remove', (cell) => {
+      if(cell.id == "selectionBBOXElement"){
+        return
+      }
       routerWorker.postMessage([{
         command: 'remove',
         id: cell.id
@@ -381,15 +375,14 @@ export default function Home() {
     });
 
     graph.on('add', (cell) => {
+      if(cell.id == "selectionBBOXElement"){
+        return
+      }
       routerWorker.postMessage([{
         command: 'add',
         cell: cell.toJSON()
       }]);
     });
-
-    //paper.on('link:snap:connect', (linkView) => {
-    //    linkView.model.router('rightAngle');
-    //});
 
     paper.on('link:snap:disconnect', (linkView) => {
       linkView.model.set({
@@ -442,40 +435,6 @@ export default function Home() {
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
       // Define ports separately
-      const portRadius = 8;
-      const portAttrs = {
-        circle: {
-          cursor: 'crosshair',
-          fill: '#4D64DD',
-          stroke: '#F4F7F6',
-          magnet: 'active',
-          r: portRadius,
-        },
-      };
-
-      const ports = {
-        groups: {
-          top: {
-            position: 'top',
-            attrs: portAttrs,
-          },
-          bottom: {
-            position: 'bottom',
-            attrs: portAttrs,
-          },
-          right: {
-            position: 'right',
-            attrs: portAttrs,
-          },
-          left: {
-            position: 'left',
-            attrs: portAttrs,
-          },
-        },
-      };
-
-      // Apply ports after initialization
-      shape.set('ports', ports);
 
       // 1) Create element tools
       const boundaryTool = new elementTools.Boundary();
