@@ -1,5 +1,5 @@
 'use client'
-import { Box, Button, IconButton, Popover, SpeedDial, SpeedDialAction, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, ButtonGroup, IconButton, Popover, SpeedDial, SpeedDialAction, Stack, Tooltip, Typography } from '@mui/material';
 import { dia, shapes, highlighters, elementTools, linkTools } from '@joint/core';
 import { Menu, MenuItem } from "@spaceymonk/react-radial-menu";
 import * as joint from '@joint/core';
@@ -81,7 +81,7 @@ export default function Home() {
 
     private initEvents() {
       // Rubberband selection start
-      this.paper.on('blank:pointerdown', (_, x, y) => this.startSelectionDragging(x, y));
+      this.paper.on('blank:pointerdown', (event, x, y) => this.startSelectionDragging(event, x, y));
 
       // Rubberband selection end
       this.paper.on('blank:pointerup', () => this.stopSelectionDragging());
@@ -96,7 +96,10 @@ export default function Home() {
       this.paper.on('element:pointerup', () => this.stopElementDragging());
     }
 
-    private startSelectionDragging(x: number, y: number) {
+    private startSelectionDragging(event: dia.Event, x: number, y: number) {
+      if ((event.originalEvent as MouseEvent).button != 0) {
+        return
+      }
       this.isSelectionDragging = true;
 
       // Clear previous selection
@@ -599,24 +602,25 @@ export default function Home() {
             </MenuItem>
           ))}
         </Menu>
-        <Stack direction="row" spacing={1} sx={{ position: 'fixed', zIndex: 2, p: 1 }}>
+        <ButtonGroup variant="contained" sx={{ boxShadow: 5, position: 'fixed', zIndex: 2, m: 1 }}>
           <Tooltip title="Zoom In">
-            <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
+            <Button onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
           </Tooltip>
           <Tooltip title="Zoom Out">
-            <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
+            <Button onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
           </Tooltip>
           <Tooltip title="Reset">
-            <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
+            <Button onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
           </Tooltip>
           <Tooltip title="Center">
-            <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
+            <Button onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
           </Tooltip>
-        </Stack>
+        </ButtonGroup>
         <Box sx={{ position: 'fixed', zIndex: 2, right: 316, paddingTop: 1 }}>
           <Tooltip title="Click for help" arrow>
             <IconButton color="primary" onClick={handleHelpClick} sx={{
               backgroundColor: 'primary.main', // Solid color from your theme
+              boxShadow: 5,
               color: 'white', // Icon color
               '&:hover': {
                 backgroundColor: 'primary.dark', // Darker color on hover
@@ -636,11 +640,11 @@ export default function Home() {
               <h3>Help Guide</h3>
               <p><b>Zooming:</b> You can zoom in and out using the <i>+</i> and <i>-</i> buttons, or reset zoom with the <i>Reset</i> button.</p>
               <p><b>Panning:</b> Hold down your mouse wheel while dragging to move the entire diagram.</p>
-              <p><b>Element Actions:</b></p>
+              <p><b>Element Actions (Right click or speed dial):</b></p>
               <ul>
-                <li><b>Add Attribute:</b> Add a new attribute element.</li>
-                <li><b>Add Entity:</b> Add a new entity element.</li>
-                <li><b>Add Relationship:</b> Add a new relationship element.</li>
+                <li><b>Attribute:</b> Add a new attribute element.</li>
+                <li><b>Entity:</b> Add a new entity element.</li>
+                <li><b>Relationship:</b> Add a new relationship element.</li>
               </ul>
               <p><b>Element Selection:</b> Click and drag to select multiple elements.</p>
               <ul>
