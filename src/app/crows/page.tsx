@@ -2,7 +2,6 @@
 import {
     Box,
     Button,
-    Drawer,
     TextField,
     IconButton,
     Typography,
@@ -14,9 +13,15 @@ import {
     MenuItem
 } from '@mui/material';
 import { dia, shapes, elementTools, highlighters, util } from '@joint/core';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
+import * as joint from '@joint/core';
 import CloseIcon from '@mui/icons-material/Close';
+import SpeedDial from '@mui/material/SpeedDial';
+import SpeedDialAction from '@mui/material/SpeedDialAction';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
+import SaveIcon from '@mui/icons-material/Save';
+import { AvoidRouter } from './avoid-router';
 
 const crowOptions = [
     { value: 'zeroOrOne', label: 'Zero or One' },
@@ -24,6 +29,19 @@ const crowOptions = [
     { value: 'zeroOrMany', label: 'Zero or Many' },
     { value: 'oneOrMany', label: 'One or Many' }
 ];
+
+const crowMarkers = {
+    'Zero or One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="none" />`, // two vertical bars
+    'One and Only One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />`, // solid bars
+    'Zero or Many': util.svg`
+        <path d="M 15 0 A 5 5 0 1 1 5 0 A 5 5 0 1 1 15 0 Z" fill="white" stroke="black" stroke-width="2"/>
+        <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
+    `, // circle and arrow
+    'One or Many': util.svg`
+        <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
+        <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />
+    ` // arrow and bar
+};
 
 export default function CrowsNotation() {
     const [paper, setPaper] = useState<dia.Paper>()
@@ -43,7 +61,14 @@ export default function CrowsNotation() {
     const [attributes, setAttributes] = useState<string[]>([]);
     const [allEntities, setAllEntities] = useState<dia.Element[]>([]);
     const [connectedEntities, setConnectedEntities] = useState<dia.Element[]>([]);
-    const [linkTypes, setLinkTypes] = useState<{ [key: string]: string }>({});
+    type LinkEnd = 'source' | 'target';
+    type LinkTypeMap = { [linkId: string]: { source: string; target: string } };
+    const [linkTypes, setLinkTypes] = useState<LinkTypeMap>({});
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        console.log('Sidebar should re-render with:', connectedEntities);
+    }, [connectedEntities]);
 
     useEffect(() => {
         const namespace = shapes;
@@ -87,8 +112,8 @@ export default function CrowsNotation() {
                         }
                     }
                 },
-                router:{name:"orthogonal"},
-                connector: { name: 'normal' }
+                //router:{name:"orthogonal"},
+                connector: { name: 'rounded' }
             })
         });
 
@@ -141,8 +166,116 @@ export default function CrowsNotation() {
             }
         });
 
-        setPaper(paper);
         setGraph(graph);
+
+        const routerWorker = new Worker(new URL("./worker.js", import.meta.url));
+
+        routerWorker.onmessage = (e) => {
+            const { command, ...data } = e.data;
+            switch (command) {
+                case 'routed': {
+                    const { cells } = data;
+                    cells.forEach((cell: joint.dia.Link) => {
+                        const model = graph.getCell(cell.id);
+                        if (model.isElement()) return;
+                        model.set({
+                            vertices: cell.vertices,
+                            source: cell.source,
+                            target: cell.target,
+                            router: null
+                        }, {
+                            fromWorker: true
+                        });
+                    });
+                    highlighters.addClass.removeAll(paper, 'awaiting-update');
+                    break;
+                }
+                default:
+                    console.log('Unknown command', command);
+                    break;
+            }
+        }
+
+
+
+        routerWorker.postMessage([{
+            command: 'reset',
+            cells: graph.toJSON().cells
+        }]);
+
+        graph.on('change', (cell, opt) => {
+
+            if (opt.fromWorker) {
+                return;
+            }
+
+            if (graph.getElements().find(el => el.id == "selectionBBOXElement")) {
+                return;
+            }
+
+            routerWorker.postMessage([{
+                command: 'change',
+                cell: cell.toJSON()
+            }]);
+
+            if (cell.isElement() && (cell.hasChanged('position') || cell.hasChanged('size'))) {
+                const links = graph.getConnectedLinks(cell);
+                links.forEach((link) => {
+                    link.router() || link.router('rightAngle');
+                    highlighters.addClass.add(link.findView(paper), 'line', 'awaiting-update', {
+                        className: 'awaiting-update'
+                    });
+                });
+            }
+
+        });
+
+        graph.on('remove', (cell) => {
+            if (cell.id == "selectionBBOXElement") {
+                return
+            }
+            routerWorker.postMessage([{
+                command: 'remove',
+                id: cell.id
+            }]);
+        });
+
+        graph.on('add', (cell) => {
+            if (cell.id == "selectionBBOXElement") {
+                return
+            }
+            routerWorker.postMessage([{
+                command: 'add',
+                cell: cell.toJSON()
+            }]);
+
+        });
+
+
+        paper.on('link:snap:disconnect', (linkView) => {
+            linkView.model.set({
+                vertices: [],
+                router: null
+            });
+        });
+
+        AvoidRouter.load().then(() => {
+            const router = new AvoidRouter(graph, {
+                shapeBufferDistance: 20,        // Distance around elements to avoid
+                idealNudgingDistance: 80,        // How far to push links apart
+                portConstraints: false,           // Helps isolate links at separate points
+                portOffset: 15,                  // Adds spacing between entry points
+                maximumLoops: 1000,              // Helps avoid tight loops
+                vertexPadding: 30,               // Extra padding between bends
+                routeOnEveryChange: false         // Ensure rerouting is more aggressive
+            });
+
+            router.addGraphListeners();
+            router.routeAll();
+        });
+
+        setPaper(paper)
+
     }, []);
 
     useEffect(() => {
@@ -217,26 +350,98 @@ export default function CrowsNotation() {
         console.log(allEntities)
     };
 
+    const handleExport = () => {
+        if (!graph) return;
+
+        const jsonString = JSON.stringify(graph.toJSON(), null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+
+        a.href = url;
+        a.download = "diagram.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result as string;
+                const json = JSON.parse(text);
+
+                if (graph) {
+                    graph.fromJSON(json);
+
+                    const newLinkTypes: LinkTypeMap = {};
+
+                    graph.getLinks().forEach((link) => {
+                        const sourceId = link.get('source')?.id;
+                        const targetId = link.get('target')?.id;
+
+                        if (!sourceId || !targetId) return;
+
+                        const sourceType = link.attr('custom/sourceType') || 'Zero or One';
+                        const targetType = link.attr('custom/targetType') || 'Zero or One';
+
+                        // Set visual marker
+                        link.attr('line/sourceMarker/markup', crowMarkers[sourceType]);
+                        link.attr('line/targetMarker/markup', crowMarkers[targetType]);
+
+                        // Save to local state
+                        newLinkTypes[link.id] = {
+                            source: sourceType,
+                            target: targetType
+                        };
+                    });
+
+                    setLinkTypes(newLinkTypes);
+                }
+            } catch (error) {
+                console.error("Import failed:", error);
+            }
+        };
+
+        reader.readAsText(file);
+    };
+
+    const triggerFileDialog = () => {
+        fileInputRef.current?.click();
+    };
+
     return (
-        <Stack direction="row" sx={{ width: 1, height: 1 }}>
-            <Box sx={{ width: 'calc(100% - 300px)', height: '100%' }}>
-                <Box sx={{ position: 'fixed', zIndex: 2 }}>
+        <Stack direction="row" sx={{width: 1, height: 1}}>
+            <input
+                type="file"
+                accept="application/json"
+                ref={fileInputRef}
+                onChange={handleImport}
+                style={{display: "none"}}
+            />
+            <Box sx={{width: 'calc(100% - 300px)', height: '100%'}}>
+                <Box sx={{position: 'fixed', zIndex: 2}}>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
                     <Button onClick={addEntity} variant="contained">Add Entity</Button>
                 </Box>
-                <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
+                <Box sx={{width: '100%', height: '100%'}} ref={boxWrapperRef}>
                     <TransformWrapper
                         centerOnInit={true}
                         initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
                         initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
-                        doubleClick={{ mode: 'toggle' }}
-                        panning={{ disabled: !panningEnabled }}
+                        doubleClick={{mode: 'toggle'}}
+                        panning={{disabled: !panningEnabled}}
                         ref={transformWrapperRef}
                     >
-                        <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+                        <TransformComponent wrapperStyle={{width: '100%', height: '100%'}}>
                             <Box id="crows_foot_graph"
                                  onMouseDown={(e) => {
                                      const target = e.target as HTMLElement;
@@ -255,18 +460,36 @@ export default function CrowsNotation() {
                         </TransformComponent>
                     </TransformWrapper>
                 </Box>
+                <Box sx={{position: 'fixed', bottom: 16, right: 16, zIndex: 2}}>
+                    <SpeedDial
+                        ariaLabel="Import/Export Diagram"
+                        icon={<SaveIcon/>}
+                    >
+                        <SpeedDialAction
+                            icon={<SaveIcon/>}
+                            tooltipTitle="Export"
+                            onClick={handleExport}
+                        />
+                        <SpeedDialAction
+                            icon={<FileUploadIcon/>}
+                            tooltipTitle="Import"
+                            onClick={triggerFileDialog}
+                        />
+                    </SpeedDial>
+                </Box>
             </Box>
-            <Paper elevation={3} sx={{ height: '100%', width: '300px'}}>
-                <Box sx = {{padding: 2}}>
-                    <Typography variant="h4" sx={{ textAlign: 'center', mb: 2 }}>Entity</Typography>
+            <Paper elevation={3} sx={{height: '100%', width: '300px'}}>
+                <Box sx={{padding: 2}}>
+                    <Typography variant="h4" sx={{textAlign: 'center', mb: 2}}>Entity</Typography>
                     {selectedEntity ? (
                         <>
                             <Typography variant="h6">Settings:</Typography>
-                            <TextField label="Name" fullWidth value={entityName} onChange={(e) => setEntityName(e.target.value)} sx={{ mt: 2 }} />
-                            <Typography variant="h6" sx={{ mt: 3 }}>Attributes:</Typography>
+                            <TextField label="Name" fullWidth value={entityName}
+                                       onChange={(e) => setEntityName(e.target.value)} sx={{mt: 2}}/>
+                            <Typography variant="h6" sx={{mt: 3}}>Attributes:</Typography>
                             <List>
                                 {attributes.map((attr, index) => (
-                                    <ListItem key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <ListItem key={index} sx={{display: 'flex', alignItems: 'center'}}>
                                         <TextField
                                             fullWidth
                                             value={attr}
@@ -276,63 +499,107 @@ export default function CrowsNotation() {
                                                 setAttributes(newAttributes);
                                             }}
                                         />
-                                        <IconButton onClick={() => setAttributes(attributes.filter((_, i) => i !== index))}>
-                                            <CloseIcon />
+                                        <IconButton
+                                            onClick={() => setAttributes(attributes.filter((_, i) => i !== index))}>
+                                            <CloseIcon/>
                                         </IconButton>
                                     </ListItem>
                                 ))}
                             </List>
 
-                            <Typography variant="h6" sx={{ mt: 3 }}>Connections:</Typography>
+                            <Typography variant="h6" sx={{mt: 3}}>Connections:</Typography>
                             <List>
-                                {connectedEntities.map((entity, index) => {
-                                    const key = [selectedEntity.id, entity.id].sort().join('-');
+                                {connectedEntities.length === 0 ? null : connectedEntities.map((entity, index) => {
+                                    const links = graph?.getConnectedLinks(selectedEntity!) || [];
+                                    const link = links.find(link => {
+                                        const sourceId = link.get('source')?.id;
+                                        const targetId = link.get('target')?.id;
+                                        return (
+                                            (sourceId === selectedEntity!.id && targetId === entity.id) ||
+                                            (sourceId === entity.id && targetId === selectedEntity!.id)
+                                        );
+                                    });
+
+                                    if (!link) return null;
+
+                                    const linkId = link.id;
+                                    const isSource = link.get('source')?.id === selectedEntity!.id;
+                                    const side: 'source' | 'target' = isSource ? 'source' : 'target';
+                                    const currentType = linkTypes[linkId]?.[side] || 'Zero or One';
+
                                     return (
-                                        <ListItem key={index} sx={{ display: 'flex', alignItems: 'center' }}>
-                                            <Typography sx={{ flexGrow: 1 }}>
+                                        <ListItem key={index} sx={{display: 'flex', alignItems: 'center'}}>
+                                            <Box sx={{mr: 1}}>
+                                                <Select
+                                                    value={currentType}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        const links = graph?.getConnectedLinks(selectedEntity!);
+
+                                                        const linkToUpdate = links.find(link => {
+                                                            const sourceId = link.get('source')?.id;
+                                                            const targetId = link.get('target')?.id;
+                                                            return (
+                                                                (sourceId === selectedEntity!.id && targetId === entity.id) ||
+                                                                (sourceId === entity.id && targetId === selectedEntity!.id)
+                                                            );
+                                                        });
+
+                                                        if (linkToUpdate) {
+                                                            const isSource = linkToUpdate.get('source')?.id === selectedEntity!.id;
+                                                            const side: LinkEnd = isSource ? 'source' : 'target';
+
+                                                            linkToUpdate.attr(`line/${side}Marker/markup`, crowMarkers[value]);
+                                                            linkToUpdate.attr(`custom/${side}Type`, value);
+
+                                                            setLinkTypes(prev => ({
+                                                                ...prev,
+                                                                [linkToUpdate.id]: {
+                                                                    ...prev[linkToUpdate.id],
+                                                                    [side]: value
+                                                                }
+                                                            }));
+                                                        }
+                                                    }}
+                                                    size="small"
+                                                    sx={{minWidth: 140}}
+                                                >
+                                                    {Object.keys(crowMarkers).map((opt, idx) => (
+                                                        <MenuItem key={idx} value={opt}>{opt}</MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </Box>
+                                            <Typography sx={{flexGrow: 1}}>
                                                 {entity.attr('headerText/text') || 'Unnamed Entity'}
                                             </Typography>
-                                            <Select
-                                                size="small"
-                                                value={linkTypes[key] || 'zeroOrOne'}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
-                                                    setLinkTypes(prev => ({ ...prev, [key]: value }));
-                                                    // You can update the link's visual style here
-                                                }}
-                                            >
-                                                {crowOptions.map((opt) => (
-                                                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                                                ))}
-                                            </Select>
-                                            <IconButton
-                                                onClick={() => {
-                                                    const links = graph.getConnectedLinks(selectedEntity!);
-                                                    const linkToRemove = links.find(link => {
-                                                        const sourceId = link.get('source')?.id;
-                                                        const targetId = link.get('target')?.id;
-                                                        return (
-                                                            (sourceId === selectedEntity!.id && targetId === entity.id) ||
-                                                            (sourceId === entity.id && targetId === selectedEntity!.id)
-                                                        );
-                                                    });
-                                                    if (linkToRemove) {
-                                                        linkToRemove.remove();
-                                                        setConnectedEntities(prev => prev.filter(e => e.id !== entity.id));
-                                                    }
-                                                }}
-                                            >
-                                                <CloseIcon />
+                                            <IconButton onClick={() => {
+                                                const links = graph.getConnectedLinks(selectedEntity!);
+                                                const linkToRemove = links.find(link => {
+                                                    const sourceId = link.get('source')?.id;
+                                                    const targetId = link.get('target')?.id;
+                                                    return (
+                                                        (sourceId === selectedEntity!.id && targetId === entity.id) ||
+                                                        (sourceId === entity.id && targetId === selectedEntity!.id)
+                                                    );
+                                                });
+                                                if (linkToRemove) {
+                                                    linkToRemove.remove();
+                                                    setConnectedEntities(prev => prev.filter(e => e.id !== entity.id));
+                                                }
+                                            }}>
+                                                <CloseIcon/>
                                             </IconButton>
                                         </ListItem>
                                     );
                                 })}
                             </List>
-                            <Button variant="contained" fullWidth onClick={() => setAttributes([...attributes, "New Attribute"])} sx={{ mt: 2 }}>+ Add Attribute</Button>
-                            <Button onClick={handleSave} variant="contained" fullWidth sx={{ mt: 3 }}>Save</Button>
+                            <Button variant="contained" fullWidth
+                                    onClick={() => setAttributes([...attributes, "New Attribute"])} sx={{mt: 2}}>+ Add
+                                Attribute</Button>
+                            <Button onClick={handleSave} variant="contained" fullWidth sx={{mt: 3}}>Save</Button>
                         </>
                     ) : (
-                        <Typography variant="h6" sx={{ textAlign: 'center', mt: 3 }}>Select an entity</Typography>
+                        <Typography variant="h6" sx={{textAlign: 'center', mt: 3}}>Select an entity</Typography>
                     )}
                 </Box>
             </Paper>
