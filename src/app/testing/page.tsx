@@ -1,6 +1,7 @@
 'use client'
-import { Box, Button, IconButton, Popover, SpeedDial, SpeedDialAction, SpeedDialIcon, Stack, Tooltip, Typography } from '@mui/material';
-import { dia, shapes, highlighters, elementTools, linkTools, util } from '@joint/core';
+import { Box, Button, IconButton, Popover, SpeedDial, SpeedDialAction, Stack, Tooltip, Typography } from '@mui/material';
+import { dia, shapes, highlighters, elementTools, linkTools } from '@joint/core';
+import { Menu, MenuItem } from "@spaceymonk/react-radial-menu";
 import * as joint from '@joint/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AvoidRouter } from './avoid-router';
@@ -8,15 +9,23 @@ import SaveIcon from "@mui/icons-material/Save";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DescriptionIcon from '@mui/icons-material/Description';
+import CircleIcon from '@mui/icons-material/Circle';
+import RectangleIcon from '@mui/icons-material/Rectangle';
+import HexagonIcon from '@mui/icons-material/Hexagon';
+import ShapeLineIcon from '@mui/icons-material/ShapeLine';
 import React from "react";
 
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
+
+type ChenOptions = "attribute" | "entity" | "relationship"
 
 export default function Home() {
   const [paper, setPaper] = useState<dia.Paper>()
   const [graph, setGraph] = useState<dia.Graph>()
   const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
   const [selectionManager, setSelectionManager] = useState<SelectionManager>();
+  const [shouldShowSelectionWheel, setShowSelectionWheel] = React.useState(false);
+  const [positionSelectionWheel, setPositionSelectionWheel] = React.useState({ x: 0, y: 0 });
   const [helpAnchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const isHelpOpen = Boolean(helpAnchorEl);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +81,7 @@ export default function Home() {
 
     private initEvents() {
       // Rubberband selection start
-      this.paper.on('blank:pointerdown', (event, x, y) => this.startSelectionDragging(x, y));
+      this.paper.on('blank:pointerdown', (_, x, y) => this.startSelectionDragging(x, y));
 
       // Rubberband selection end
       this.paper.on('blank:pointerup', () => this.stopSelectionDragging());
@@ -81,7 +90,7 @@ export default function Home() {
       this.paper.on('element:pointerdown', (elementView, event) => this.startElementDragging(elementView, event));
 
       // Element drag move (only moves after selection)
-      this.paper.on('element:pointermove', (elementView, event, x, y) => this.dragElements(elementView, x, y));
+      this.paper.on('element:pointermove', (elementView, _, x, y) => this.dragElements(elementView, x, y));
 
       // Element drag stop
       this.paper.on('element:pointerup', () => this.stopElementDragging());
@@ -102,8 +111,15 @@ export default function Home() {
       selectionBox.addTo(this.graph);
 
       // Update the box size on mouse move
-      this.paper.on('blank:pointermove', (event, newX, newY) => {
-        selectionBox.resize(newX - x, newY - y);
+      this.paper.on('blank:pointermove', (_, newX, newY) => {
+        const width = Math.abs(newX - x);
+        const height = Math.abs(newY - y);
+
+        const newXPos = Math.min(x, newX);
+        const newYPos = Math.min(y, newY);
+
+        selectionBox.resize(width, height);
+        selectionBox.position(newXPos, newYPos);
       });
 
       // On mouse up, select elements inside the box
@@ -124,7 +140,7 @@ export default function Home() {
       this.isSelectionDragging = false;
     }
 
-    private startElementDragging(elementView: joint.dia.ElementView, event: joint.dia.Event) {
+    private startElementDragging(elementView: joint.dia.ElementView, _: joint.dia.Event) {
       if (this.isSelectionDragging) return; // Prevent dragging while selecting
 
       const element = elementView.model;
@@ -308,7 +324,6 @@ export default function Home() {
       const { command, ...data } = e.data;
       switch (command) {
         case 'routed': {
-          console.log(data)
           const { cells } = data;
           cells.forEach((cell: joint.dia.Link) => {
             const model = graph.getCell(cell.id);
@@ -343,7 +358,6 @@ export default function Home() {
       }
 
       if (graph.getElements().find(el => el.id == "selectionBBOXElement")) {
-        console.log("found it")
         return;
       }
 
@@ -365,7 +379,7 @@ export default function Home() {
     });
 
     graph.on('remove', (cell) => {
-      if(cell.id == "selectionBBOXElement"){
+      if (cell.id == "selectionBBOXElement") {
         return
       }
       routerWorker.postMessage([{
@@ -375,7 +389,7 @@ export default function Home() {
     });
 
     graph.on('add', (cell) => {
-      if(cell.id == "selectionBBOXElement"){
+      if (cell.id == "selectionBBOXElement") {
         return
       }
       routerWorker.postMessage([{
@@ -428,10 +442,15 @@ export default function Home() {
     };
   }, [handleKeyDown]);
 
-  const addElement = (name: string, shape: dia.Element) => {
+  const addElement = (name: string, shape: dia.Element, useWheel: boolean) => {
     if (graph && paper) {
       //shape.addTo(graph);
-      shape.position(width / 2 - elementWidth / 2, height / 2 - elementHeight / 2);
+      const x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
+      const y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5 // To note, the 36.5 is the height of the header
+
+      console.log(transformWrapperRef.current)
+      console.log(x, y)
+      shape.position(x - elementWidth / 2, y - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
       // Define ports separately
@@ -509,7 +528,6 @@ export default function Home() {
       try {
         const text = e.target?.result as string; // Read file content
         const json = JSON.parse(text); // Parse JSON
-        console.log(json)
         if (graph) {
           graph.fromJSON(json)
         }
@@ -519,22 +537,81 @@ export default function Home() {
       }
     };
 
-    console.log(file)
 
     reader.readAsText(file); // Read file as text
   };
 
+  function handleSelection(option: ChenOptions, useWheel: boolean = false) {
+    switch (option) {
+      case "attribute":
+        addElement('attribute', new shapes.standard.Ellipse(), useWheel)
+        break;
+      case "entity":
+        addElement('entity', new shapes.standard.Rectangle(), useWheel)
+        break;
+      case "relationship":
+        addElement('relationship', new shapes.standard.Polygon(), useWheel)
+        break;
+    }
+
+  }
+
+  const handleItemClick = (item: string) => {
+    setShowSelectionWheel(false)
+    handleSelection(item as ChenOptions, true)
+  };
+
+  const menuItems: { label: string, data: ChenOptions }[] = [
+    {
+      label: "Attribute",
+      data: "attribute",
+    },
+    {
+      label: "Relationship",
+      data: "relationship",
+    },
+    {
+      label: "Entity",
+      data: "entity",
+    }
+  ]
+
   return (
     <Stack direction="row" sx={{ width: '100%', height: '100%' }}>
       <Box sx={{ width: 'calc(100% - 300px)', height: '100%' }}>
+        <Menu
+          centerX={positionSelectionWheel.x}
+          centerY={positionSelectionWheel.y}
+          innerRadius={0}
+          outerRadius={150}
+          show={shouldShowSelectionWheel}
+          animation={["scale"]}
+          animationTimeout={75}
+          drawBackground
+        >
+          {menuItems.map(({ label, data }) => (
+            <MenuItem
+              key={data}
+              data={data}
+              onItemClick={(_, __, d) => handleItemClick(d)}
+            >
+              {label}
+            </MenuItem>
+          ))}
+        </Menu>
         <Stack direction="row" spacing={1} sx={{ position: 'fixed', zIndex: 2, p: 1 }}>
-          <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
-          <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
-          <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
-          <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
-          <Button onClick={() => addElement('attribute', new shapes.standard.Ellipse())} variant="contained">Add Attribute</Button>
-          <Button onClick={() => addElement('entity', new shapes.standard.Rectangle())} variant="contained">Add Entity</Button>
-          <Button onClick={() => addElement('relationship', new shapes.standard.Polygon())} variant="contained">Add Relationship</Button>
+          <Tooltip title="Zoom In">
+            <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
+          </Tooltip>
+          <Tooltip title="Zoom Out">
+            <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
+          </Tooltip>
+          <Tooltip title="Reset">
+            <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
+          </Tooltip>
+          <Tooltip title="Center">
+            <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
+          </Tooltip>
         </Stack>
         <Box sx={{ position: 'fixed', zIndex: 2, right: 316, paddingTop: 1 }}>
           <Tooltip title="Click for help" arrow>
@@ -558,7 +635,7 @@ export default function Home() {
             <Typography sx={{ px: 2, maxWidth: 400 }} component="div">
               <h3>Help Guide</h3>
               <p><b>Zooming:</b> You can zoom in and out using the <i>+</i> and <i>-</i> buttons, or reset zoom with the <i>Reset</i> button.</p>
-              <p><b>Panning:</b> Use right click (or hold your mouse wheel) while dragging to move the entire diagram.</p>
+              <p><b>Panning:</b> Hold down your mouse wheel while dragging to move the entire diagram.</p>
               <p><b>Element Actions:</b></p>
               <ul>
                 <li><b>Add Attribute:</b> Add a new attribute element.</li>
@@ -588,21 +665,43 @@ export default function Home() {
             onChange={handleImport}
             style={{ display: "none" }}
           />
-          <SpeedDial
-            ariaLabel="SpeedDial actions"
-            icon={<DescriptionIcon />}
-          >
-            <SpeedDialAction
-              icon={<SaveIcon />}
-              tooltipTitle="Save"
-              onClick={onSave}
-            />
-            <SpeedDialAction
-              icon={<FileUploadIcon />}
-              tooltipTitle="Import"
-              onClick={onImport}
-            />
-          </SpeedDial>
+          <Stack direction="row" spacing={2}>
+            <SpeedDial
+              ariaLabel="add shapes"
+              icon={<ShapeLineIcon />}
+            >
+              <SpeedDialAction
+                icon={<RectangleIcon />}
+                tooltipTitle="Add Entity"
+                onClick={() => handleSelection("entity")}
+              />
+              <SpeedDialAction
+                icon={<HexagonIcon />}
+                tooltipTitle="Add Relationship"
+                onClick={() => handleSelection("relationship")}
+              />
+              <SpeedDialAction
+                icon={<CircleIcon />}
+                tooltipTitle="Add Attribute"
+                onClick={() => handleSelection("attribute")}
+              />
+            </SpeedDial>
+            <SpeedDial
+              ariaLabel="SpeedDial actions"
+              icon={<DescriptionIcon />}
+            >
+              <SpeedDialAction
+                icon={<SaveIcon />}
+                tooltipTitle="Save"
+                onClick={onSave}
+              />
+              <SpeedDialAction
+                icon={<FileUploadIcon />}
+                tooltipTitle="Import"
+                onClick={onImport}
+              />
+            </SpeedDial>
+          </Stack>
         </Box>
         <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
           <TransformWrapper
@@ -615,7 +714,15 @@ export default function Home() {
           >
             <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
               <Box id="joinjs_graph"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setShowSelectionWheel(true);
+                  setPositionSelectionWheel({ x: e.clientX, y: e.clientY });
+                }}
                 onMouseDown={(e) => {
+                  if (shouldShowSelectionWheel) {
+                    setShowSelectionWheel(false)
+                  }
                   const target = e.target as HTMLElement;
 
                   // Check if clicking an element
@@ -631,7 +738,7 @@ export default function Home() {
                     setPanningEnabled(false);
                   }
 
-                  if (e.button == 0) {
+                  if (e.button == 0 || e.button == 2) {
                     setPanningEnabled(false);
                   }
                 }}
