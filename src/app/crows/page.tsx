@@ -30,18 +30,7 @@ const crowOptions = [
     { value: 'oneOrMany', label: 'One or Many' }
 ];
 
-const crowMarkers = {
-    'Zero or One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="none" />`, // two vertical bars
-    'One and Only One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />`, // solid bars
-    'Zero or Many': util.svg`
-        <path d="M 15 0 A 5 5 0 1 1 5 0 A 5 5 0 1 1 15 0 Z" fill="white" stroke="black" stroke-width="2"/>
-        <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
-    `, // circle and arrow
-    'One or Many': util.svg`
-        <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
-        <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />
-    ` // arrow and bar
-};
+
 
 export default function CrowsNotation() {
     const [paper, setPaper] = useState<dia.Paper>()
@@ -65,6 +54,24 @@ export default function CrowsNotation() {
     type LinkTypeMap = { [linkId: string]: { source: string; target: string } };
     const [linkTypes, setLinkTypes] = useState<LinkTypeMap>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [crowMarkers, setCrowMarkers] = useState<Record<string, any>>({});
+
+    useEffect(() => {
+        const markers = {
+            'Zero or One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="none" />`,
+            'One and Only One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />`,
+            'Zero or Many': util.svg`
+            <path d="M 15 0 A 5 5 0 1 1 5 0 A 5 5 0 1 1 15 0 Z" fill="white" stroke="black" stroke-width="2"/>
+            <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
+        `,
+            'One or Many': util.svg`
+            <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
+            <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />
+        `
+        };
+
+        setCrowMarkers(markers);
+    }, []);
 
     useEffect(() => {
         console.log('Sidebar should re-render with:', connectedEntities);
