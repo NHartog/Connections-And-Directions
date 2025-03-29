@@ -56,18 +56,25 @@ export default function CrowsNotation() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [crowMarkers, setCrowMarkers] = useState<Record<string, any>>({});
 
+    const FG_COLOR = "black";
+    const BG_COLOR = "white";
+
     useEffect(() => {
         const markers = {
-            'Zero or One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="none" />`,
-            'One and Only One': util.svg`<path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />`,
+            'Zero or One': util.svg`
+    <path d="M 5 -5 V 5" stroke-width="2" fill="none" />
+    <circle cx="14" r="4" stroke-width="2" fill="${BG_COLOR}" />
+  `,
+            'One and Only One': util.svg`
+    <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="${FG_COLOR}" />
+  `,
             'Zero or Many': util.svg`
-            <path d="M 15 0 A 5 5 0 1 1 5 0 A 5 5 0 1 1 15 0 Z" fill="white" stroke="black" stroke-width="2"/>
-            <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
-        `,
+    <path d="M 0 -4 L 10 0 M 0 4 L 10 0 M 0 0 H 10" stroke-width="2" fill="none" />
+    <circle cx="14" r="4" fill="${BG_COLOR}" stroke-width="2" />
+  `,
             'One or Many': util.svg`
-            <path d="M 20 -5 L 10 0 L 20 5 Z" fill="black"/>
-            <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="black" />
-        `
+    <path d="M 0 -4 L 10 0 M 0 4 L 10 0 M 10 -5 V 5" stroke-width="2" />
+  `
         };
 
         setCrowMarkers(markers);
@@ -109,12 +116,14 @@ export default function CrowsNotation() {
                         strokeWidth: 2,
                         sourceMarker: {
                             markup: util.svg`
-                            <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="#000" />
+                            <path d="M 5 -5 V 5" stroke-width="2" fill="none" />
+                            <circle cx="14" r="4" stroke-width="2" fill="${BG_COLOR}" />
                         `
                         },
                         targetMarker: {
                             markup: util.svg`
-                            <path d="M 5 -5 V 5 M 10 -5 V 5" stroke-width="2" fill="#000" />
+                            <path d="M 5 -5 V 5" stroke-width="2" fill="none" />
+                            <circle cx="14" r="4" stroke-width="2" fill="${BG_COLOR}" />
                         `
                         }
                     }
@@ -375,7 +384,7 @@ export default function CrowsNotation() {
 
     const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file || !graph) return;
 
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -383,40 +392,63 @@ export default function CrowsNotation() {
                 const text = e.target?.result as string;
                 const json = JSON.parse(text);
 
-                if (graph) {
-                    graph.fromJSON(json);
+                const elements: dia.Element[] = [];
+                const links: dia.Link[] = [];
 
-                    const newLinkTypes: LinkTypeMap = {};
+                for (const cell of json.cells) {
+                    if (cell.type?.startsWith("standard.")) {
+                        const typeKey = cell.type.split(".")[1];
+                        const ElementClass = (shapes.standard as any)[typeKey];
+                        if (ElementClass) {
+                            const element = new ElementClass(cell);
+                            elements.push(element);
+                        } else {
+                            console.warn("Unknown element type:", cell.type);
+                        }
+                    } else if (cell.type === "link" || cell.type?.includes("Link")) {
+                        const link = new shapes.standard.Link(cell);
+                        links.push(link);
+                    }
+                }
 
-                    graph.getLinks().forEach((link) => {
-                        const sourceId = link.get('source')?.id;
-                        const targetId = link.get('target')?.id;
+                graph.clear();
+                [...elements, ...links].forEach(cell => cell.addTo(graph));
 
-                        if (!sourceId || !targetId) return;
 
-                        const sourceType = link.attr('custom/sourceType') || 'Zero or One';
-                        const targetType = link.attr('custom/targetType') || 'Zero or One';
+                console.log("✅ Imported with", elements.length, "elements and", links.length, "links.");
+            } catch (error) {
+                console.error("❌ Import failed:", error);
+            }
 
-                        // Set visual marker
-                        link.attr('line/sourceMarker/markup', crowMarkers[sourceType]);
-                        link.attr('line/targetMarker/markup', crowMarkers[targetType]);
-
-                        // Save to local state
-                        newLinkTypes[link.id] = {
-                            source: sourceType,
-                            target: targetType
-                        };
+            if (paper) {
+                graph.getElements().forEach((element) => {
+                    const boundaryTool = new elementTools.Boundary();
+                    const removeButton = new elementTools.Remove({
+                        useModelGeometry: true,
+                        x: '10%',
+                        y: '50%'
+                    });
+                    const connectTool = new elementTools.Connect({
+                        useModelGeometry: true,
+                        x: '90%',
+                        y: '50%'
                     });
 
-                    setLinkTypes(newLinkTypes);
-                }
-            } catch (error) {
-                console.error("Import failed:", error);
+                    const toolsView = new dia.ToolsView({
+                        name: 'basic-tools',
+                        tools: [boundaryTool, removeButton, connectTool]
+                    });
+
+                    const view = element.findView(paper);
+                    view.addTools(toolsView);
+                    view.hideTools(); // Hide initially
+                });
             }
         };
 
         reader.readAsText(file);
     };
+
 
     const triggerFileDialog = () => {
         fileInputRef.current?.click();
@@ -554,8 +586,12 @@ export default function CrowsNotation() {
 
                                                         if (linkToUpdate) {
                                                             const isSource = linkToUpdate.get('source')?.id === selectedEntity!.id;
-                                                            const side: LinkEnd = isSource ? 'source' : 'target';
+                                                            const side: 'source' | 'target' = isSource ? 'source' : 'target';
 
+                                                            // ✅ FIX: clear out the old marker
+                                                            linkToUpdate.removeAttr(`line/${side}Marker/markup`);
+
+                                                            // Apply the new marker
                                                             linkToUpdate.attr(`line/${side}Marker/markup`, crowMarkers[value]);
                                                             linkToUpdate.attr(`custom/${side}Type`, value);
 
