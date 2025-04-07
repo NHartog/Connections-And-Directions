@@ -1,11 +1,13 @@
 'use client'
-import { Box, Button, ButtonGroup, IconButton, Popover, SpeedDial, SpeedDialAction, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, ButtonGroup, FormControl, IconButton, InputLabel, Popover, Select, SpeedDial, SpeedDialAction, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import * as MUI from '@mui/material';
 import { dia, shapes, highlighters, elementTools, linkTools } from '@joint/core';
 import { Menu, MenuItem } from "@spaceymonk/react-radial-menu";
 import * as joint from '@joint/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AvoidRouter } from './avoid-router';
 import SaveIcon from "@mui/icons-material/Save";
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -22,6 +24,8 @@ type ChenOptions = "attribute" | "entity" | "relationship"
 export default function Home() {
   const [paper, setPaper] = useState<dia.Paper>()
   const [graph, setGraph] = useState<dia.Graph>()
+  const [selectedElement, setSelectedElement] = useState<dia.Element>()
+  const [elementConfigurationUI, setElementConfigurationUI] = useState<React.JSX.Element>(<></>);
   const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
   const [selectionManager, setSelectionManager] = useState<SelectionManager>();
   const [shouldShowSelectionWheel, setShowSelectionWheel] = React.useState(false);
@@ -129,11 +133,14 @@ export default function Home() {
       this.paper.once('blank:pointerup', () => {
         const bbox = selectionBox.getBBox();
         this.graph.getElements().forEach((el) => {
-          if (bbox.containsRect(el.getBBox())) {
+          if (bbox.containsRect(el.getBBox()) && el.id != "selectionBBOXElement") {
             this.addElement(el);
           }
         });
 
+        if (this.selected.size == 1) {
+          setSelectedElement(this.selected.values().next().value)
+        }
         selectionBox.remove();
         this.isSelectionDragging = false; // Enable dragging after selection
       });
@@ -151,6 +158,11 @@ export default function Home() {
 
       if (!this.selected.has(element)) {
         this.clearSelection();
+        if (this.selected.size == 0) {
+          setSelectedElement(element)
+        } else {
+          setSelectedElement(undefined)
+        }
         this.addElement(element);
       }
 
@@ -196,6 +208,7 @@ export default function Home() {
       if (!shiftHeld.current) {
         this.selected.forEach((el) => el.attr('body/stroke', 'black'));
         this.selected.clear();
+        setSelectedElement(undefined)
       }
     }
 
@@ -422,9 +435,21 @@ export default function Home() {
     setPaper(paper)
   }, [])
 
+  function isInput(event: KeyboardEvent) {
+
+    if (event.target && typeof (event.target as any).className == "string") {
+      if (((event.target as any)?.className as string).indexOf("MuiInputBase") == -1) {
+        return false
+      }
+    }
+
+    return true
+  }
+
   // Handle delete and backspace key events
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    console.log(event)
+    if (event.key === 'Delete' || event.key === 'Backspace' && !isInput(event)) {
       if (selectionManager) {
         graph?.removeCells(selectionManager?.getSelectedElements())
         selectionManager?.clearSelection()
@@ -445,7 +470,7 @@ export default function Home() {
     };
   }, [handleKeyDown]);
 
-  const addElement = (name: string, shape: dia.Element, useWheel: boolean) => {
+  const addElement = (name: ChenOptions, shape: dia.Element, useWheel: boolean) => {
     if (graph && paper) {
       //shape.addTo(graph);
       const x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
@@ -456,6 +481,7 @@ export default function Home() {
       shape.position(x - elementWidth / 2, y - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
+      shape.attr('elementType', name)
       // Define ports separately
 
       // 1) Create element tools
@@ -578,6 +604,121 @@ export default function Home() {
       data: "entity",
     }
   ]
+
+  useEffect(() => {
+    console.log(1, selectedElement)
+    if (selectedElement) {
+      setElementConfigurationUI(getElementConfigurationUI(selectedElement))
+    } else {
+      setElementConfigurationUI(<></>)
+    }
+  }, [selectedElement])
+
+  function getElementConfigurationUI(element: dia.Element) {
+
+    switch (element.attr().elementType) {
+      case "attribute":
+        return getAttributeConfigUI(element)
+      case "entity":
+        return getEntityConfigUI(element)
+      case "relationship":
+        return getRelationshipConfigUI(element)
+      default:
+        return <></>
+    }
+  }
+
+  function getConfigUILayout(label: string, children: React.JSX.Element) {
+    return (
+      <Stack sx={{ width: 1, height: 'auto', pt: 1 }} alignItems="center" direction="column" spacing={3}>
+        <MUI.Paper elevation={5} sx={{ textAlign: 'center', width: 0.8, p: 2 }}>
+          <Typography variant="h3">{label}</Typography>
+        </MUI.Paper>
+        <Box sx={{ width: 1, height: 1, display: 'inline-block' }}>
+          <Stack sx={{ width: 'auto', height: 'auto', p:1 }} alignItems="center" direction="column" spacing={1}>
+            {children}
+          </Stack>
+        </Box>
+      </Stack>
+    )
+  }
+
+  function getAttributeConfigUI(element: dia.Element) {
+    return getConfigUILayout("Attribute",
+      <>
+      </>
+
+    )
+  }
+
+  function getEntityConfigUI(element: dia.Element) {
+
+    console.log(element.attr())
+
+    // TODO: Get attributes through element connections
+
+    const attrs = ["street", "number", "name", "hour"]
+    return getConfigUILayout("Entity",
+      <>
+        <Stack sx={{ width: 1 }} spacing={1}>
+          <Typography variant="h4">Settings:</Typography>
+          <TextField id="outlined-basic" label="Name" variant="outlined" />
+          <Stack direction="row" spacing={1} sx={{ width: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel id="type">Type</InputLabel>
+              <Select
+                labelId="type"
+                id="type"
+                label="Type"
+                defaultValue=''
+              >
+                {/* TODO: change these selections to be something valid*/}
+                <MUI.MenuItem value={10}>Ten</MUI.MenuItem>
+                <MUI.MenuItem value={20}>Twenty</MUI.MenuItem>
+                <MUI.MenuItem value={30}>Thirty</MUI.MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel id="color">Color</InputLabel>
+              <Select
+                labelId="color"
+                id="color"
+                label="Color"
+                defaultValue=''
+              >
+                {/* TODO: change these selections to be something valid*/}
+                <MUI.MenuItem value={10}>Ten</MUI.MenuItem>
+                <MUI.MenuItem value={20}>Twenty</MUI.MenuItem>
+                <MUI.MenuItem value={30}>Thirty</MUI.MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+        </Stack>
+        <Stack sx={{ width: 1 }} alignItems="center">
+          <Typography variant="h4">Attributes:</Typography>
+          {attrs.map((attr: string, idx: number) =>
+            <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0 }}>
+              <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
+
+                <Typography variant="h5" sx={{ px: 1 }}>{idx}.</Typography>
+                <TextField id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr} />
+                <IconButton aria-label="delete" color="error" sx={{ aspectRatio: 1 }}>
+                  <HighlightOffIcon />
+                </IconButton>
+              </Stack>
+            </li>
+          )}
+        </Stack>
+      </>
+    )
+  }
+
+  function getRelationshipConfigUI(element: dia.Element) {
+
+    return getConfigUILayout("Relationship",
+      <Typography>Relationship: </Typography>
+    )
+  }
 
   return (
     <Stack direction="row" sx={{ width: '100%', height: '100%' }}>
@@ -753,7 +894,7 @@ export default function Home() {
         </Box>
       </Box>
       <Box sx={{ backgroundColor: 'white', width: '300px', height: '100%' }}>
-
+        {elementConfigurationUI}
       </Box>
     </Stack>
   )
