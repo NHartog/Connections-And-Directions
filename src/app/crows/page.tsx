@@ -10,7 +10,7 @@ import {
     List,
     Select,
     Stack,
-    MenuItem
+    MenuItem, Checkbox, Tooltip, Popover
 } from '@mui/material';
 import { dia, shapes, elementTools, highlighters, util } from '@joint/core';
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,6 +22,8 @@ import SpeedDialAction from '@mui/material/SpeedDialAction';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import SaveIcon from '@mui/icons-material/Save';
 import { AvoidRouter } from './avoid-router';
+import HighlightOffIcon from "@mui/icons-material/HighlightOff";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 
 const crowOptions = [
     { value: 'zeroOrOne', label: 'Zero or One' },
@@ -44,10 +46,11 @@ export default function CrowsNotation() {
     const elementWidth = 200
     const elementHeight = 100
 
+
     const [open, setOpen] = useState(false);
     const [selectedEntity, setSelectedEntity] = useState<dia.Element | null>(null);
     const [entityName, setEntityName] = useState("");
-    const [attributes, setAttributes] = useState<string[]>([]);
+    const [attributes, setAttributes] = useState<{ name: string; isKey: boolean }[]>([]);
     const [allEntities, setAllEntities] = useState<dia.Element[]>([]);
     const [connectedEntities, setConnectedEntities] = useState<dia.Element[]>([]);
     type LinkEnd = 'source' | 'target';
@@ -56,8 +59,19 @@ export default function CrowsNotation() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [crowMarkers, setCrowMarkers] = useState<Record<string, any>>({});
 
+    const [helpAnchorEl, setHelpAnchorEl] = useState<null | HTMLElement>(null);
+    const isHelpOpen = Boolean(helpAnchorEl);
+
     const FG_COLOR = "black";
     const BG_COLOR = "white";
+
+    const handleHelpClick = (event: React.MouseEvent<HTMLElement>) => {
+        setHelpAnchorEl(event.currentTarget);
+    };
+
+    const handleHelpClose = () => {
+        setHelpAnchorEl(null);
+    };
 
     useEffect(() => {
         const markers = {
@@ -143,7 +157,11 @@ export default function CrowsNotation() {
             } else {
                 setSelectedEntity(element);
                 setEntityName(element.attr('headerText/text') || "");
-                setAttributes(element.attr('bodyText/text')?.split('\n') || []);
+                const rawAttrs = element.attr('bodyText/text')?.split('\n') || [];
+                setAttributes(rawAttrs.map(attr => ({
+                    name: attr.replace(/^\*\s*/, ''),
+                    isKey: attr.startsWith('* ')
+                })));
                 highlighters.mask.removeAll(paper);
                 highlighters.mask.add(elementView, { selector: 'root' }, 'selection-highlight', {
                     deep: true,
@@ -361,7 +379,8 @@ export default function CrowsNotation() {
     const handleSave = () => {
         if (selectedEntity) {
             selectedEntity.attr('headerText/text', entityName);
-            selectedEntity.attr('bodyText/text', attributes.join("\n"));
+            const attrText = attributes.map(attr => attr.isKey ? `* ${attr.name}` : attr.name).join('\n');
+            selectedEntity.attr('bodyText/text', attrText);
         }
         console.log(allEntities)
     };
@@ -470,6 +489,8 @@ export default function CrowsNotation() {
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
                     <Button onClick={addEntity} variant="contained">Add Entity</Button>
+
+
                 </Box>
                 <Box sx={{width: '100%', height: '100%'}} ref={boxWrapperRef}>
                     <TransformWrapper
@@ -517,6 +538,43 @@ export default function CrowsNotation() {
                     </SpeedDial>
                 </Box>
             </Box>
+            <Box sx={{ position: 'fixed', top: 16, right: 332, zIndex: 2 }}>
+                <Tooltip title="Click for help" arrow>
+                    <IconButton
+                        color="primary"
+                        onClick={handleHelpClick}
+                        sx={{
+                            backgroundColor: 'primary.main',
+                            color: 'white',
+                            '&:hover': {
+                                backgroundColor: 'primary.dark',
+                            },
+                        }}
+                    >
+                        <HelpOutlineIcon />
+                    </IconButton>
+                </Tooltip>
+                <Popover
+                    open={isHelpOpen}
+                    anchorEl={helpAnchorEl}
+                    onClose={handleHelpClose}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                    transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                    <Box sx={{ px: 2, py: 1, maxWidth: 300 }}>
+                        <Typography variant="h6" gutterBottom>Help Guide</Typography>
+                        <Typography variant="body2"><b>Zoom:</b> Use + and - buttons</Typography>
+                        <Typography variant="body2"><b>Center:</b> Use the "o" button</Typography>
+                        <Typography variant="body2"><b>Reset:</b> Use the "x" button</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}><b>Tips:</b></Typography>
+                        <ul>
+                            <li><Typography variant="body2">Click "Add Entity" to create a new box</Typography></li>
+                            <li><Typography variant="body2">Use the red ❌ to delete attributes</Typography></li>
+                            <li><Typography variant="body2">Use checkboxes to mark attributes as primary</Typography></li>
+                        </ul>
+                    </Box>
+                </Popover>
+            </Box>
             <Paper elevation={3} sx={{height: '100%', width: '300px'}}>
                 <Box sx={{padding: 2}}>
                     <Typography variant="h4" sx={{textAlign: 'center', mb: 2}}>Entity</Typography>
@@ -528,19 +586,42 @@ export default function CrowsNotation() {
                             <Typography variant="h6" sx={{mt: 3}}>Attributes:</Typography>
                             <List>
                                 {attributes.map((attr, index) => (
-                                    <ListItem key={index} sx={{display: 'flex', alignItems: 'center'}}>
-                                        <TextField
-                                            fullWidth
-                                            value={attr}
+                                    <ListItem
+                                        key={index}
+                                        sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            px: 1,
+                                            py: 0.5,
+                                        }}
+                                    >
+                                        <Typography sx={{ width: 20 }}>{index + 1}.</Typography>
+                                        <Checkbox
+                                            size="small"
+                                            checked={attr.isKey}
                                             onChange={(e) => {
-                                                const newAttributes = [...attributes];
-                                                newAttributes[index] = e.target.value;
-                                                setAttributes(newAttributes);
+                                                const newAttrs = [...attributes];
+                                                newAttrs[index].isKey = e.target.checked;
+                                                setAttributes(newAttrs);
                                             }}
                                         />
+                                        <TextField
+                                            size="medium"
+                                            label="Attribute Name"
+                                            value={attr.name}
+                                            onChange={(e) => {
+                                                const newAttrs = [...attributes];
+                                                newAttrs[index].name = e.target.value;
+                                                setAttributes(newAttrs);
+                                            }}
+                                            sx={{ flexGrow: 1, mr: 1 }}
+                                        />
                                         <IconButton
-                                            onClick={() => setAttributes(attributes.filter((_, i) => i !== index))}>
-                                            <CloseIcon/>
+                                            onClick={() => setAttributes(attributes.filter((_, i) => i !== index))}
+                                            size="small"
+                                            sx={{ color: 'error.main' }}
+                                        >
+                                            <HighlightOffIcon />
                                         </IconButton>
                                     </ListItem>
                                 ))}
@@ -637,7 +718,7 @@ export default function CrowsNotation() {
                                 })}
                             </List>
                             <Button variant="contained" fullWidth
-                                    onClick={() => setAttributes([...attributes, "New Attribute"])} sx={{mt: 2}}>+ Add
+                                    onClick={() => setAttributes([...attributes, { name: "New Attribute", isKey: false }])} sx={{mt: 2}}>+ Add
                                 Attribute</Button>
                             <Button onClick={handleSave} variant="contained" fullWidth sx={{mt: 3}}>Save</Button>
                         </>
