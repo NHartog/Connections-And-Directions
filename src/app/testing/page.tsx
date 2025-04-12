@@ -336,7 +336,7 @@ export default function Home() {
       linkPinning: false,
       interactive: { linkMove: false },
       snapLinks: { radius: 10 },
-      defaultLink: doubleLine,
+      defaultLink: singleLine,
       linkLayer: 0,
       defaultConnectionPoint: {
         name: 'boundary',
@@ -389,19 +389,20 @@ export default function Home() {
       elementView.hideTools();
     });
 
+    paper.on('link:connect', () => {
+      refreshNeighbors()
+    })
+
     graph.on('remove', (cell: dia.Cell) => {
       fixSelectedElement(cell)
+      refreshNeighbors()
     })
 
     setPaper(paper)
   }, [])
 
   const fixSelectedElement = (element: dia.Cell) => {
-    console.log("hah")
-    console.log(element)
-    console.log(selectedElementRef.current)
     if (element.cid == selectedElementRef.current?.cid) {
-      console.log('made it')
       setSelectedElement(undefined)
     }
   }
@@ -419,7 +420,6 @@ export default function Home() {
 
   // Handle delete and backspace key events
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    console.log(event)
     if (event.key === 'Delete' || event.key === 'Backspace' && !isInput(event)) {
       if (selectionManager) {
         graphRef.current?.removeCells(selectionManager?.getSelectedElements())
@@ -441,14 +441,20 @@ export default function Home() {
     };
   }, [handleKeyDown]);
 
-  const addElement = (name: ChenOptions, shape: dia.Element, useWheel: boolean) => {
+  const addElement = (name: ChenOptions, shape: dia.Element, useWheel: boolean, xPos?: number, yPos?: number, label?: string, elementNum: number = 0) => {
     if (graphRef.current && paper) {
       //shape.addTo(graph);
-      const x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
-      const y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5 // To note, the 36.5 is the height of the header
+      var x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
+      var y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5 // To note, the 36.5 is the height of the header
 
-      console.log(transformWrapperRef.current)
-      console.log(x, y)
+      if (xPos) {
+        x = xPos + elementWidth / 2
+      }
+
+      if (yPos) {
+        y = yPos + elementHeight / 2
+      }
+
       switch (name) {
         case 'relationship': {
           morphShape(shape, diamondMarkup, diamondAttrs)
@@ -466,9 +472,10 @@ export default function Home() {
 
       shape.position(x - elementWidth / 2, y - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
-      shape.attr('label', { text: name });
+      shape.attr('label', { text: label ? label : name });
       shape.attr('elementType', name)
       shape.attr('elementSubType', 'regular')
+      shape.attr('elementNum', elementNum)
       // Define ports separately
 
       // 1) Create element tools
@@ -495,7 +502,11 @@ export default function Home() {
       const shapeView = shape.findView(paper);
       shapeView.addTools(toolsView);
       shapeView.hideTools(); // Hide the tools
+
+      return shape
     }
+
+    return undefined
   }
 
 
@@ -540,7 +551,6 @@ export default function Home() {
         if (graphRef.current) {
           graphRef.current.fromJSON(json)
         }
-        console.log("Imported JSON:", json);
       } catch (error) {
         console.error("Error parsing JSON:", error);
       }
@@ -587,6 +597,7 @@ export default function Home() {
 
     const currentElementType = currentAttrs?.elementType;
     const currentElementSubType = currentAttrs?.elementSubType;
+    const currentElementNum = currentAttrs?.elementNum;
 
     // Deep clone to avoid mutation
     const mergedAttrs = JSON.parse(JSON.stringify(newAttrs));
@@ -609,6 +620,10 @@ export default function Home() {
 
     if (currentElementSubType !== undefined) {
       mergedAttrs.elementSubType = currentElementSubType;
+    }
+
+    if (currentElementNum !== undefined) {
+      mergedAttrs.elementNum = currentElementNum;
     }
 
     // Apply morph
@@ -765,7 +780,8 @@ export default function Home() {
       cy: elementHeight / 2,
       fill: '#FFFFFF',
       strokeWidth: 2,
-      stroke: '#000000'
+      stroke: '#000000',
+      strokeDasharray: 'none'
     },
     label: {
       text: 'Ellipse',
@@ -779,7 +795,66 @@ export default function Home() {
         width: '70%',
         height: '70%',
         ellipsis: true
-      }
+      },
+      textDecoration: 'none'
+    }
+  };
+
+  const keyAttributeMarkup = ellipseMarkup;
+
+  const keyAttributeAttrs = {
+    ...ellipseAttrs,
+    label: {
+      ...ellipseAttrs.label,
+      textDecoration: 'underline'
+    }
+  };
+
+  const partialKeyAttributeMarkup = [
+    { tagName: 'ellipse', selector: 'body' },
+    { tagName: 'text', selector: 'label' },
+    { tagName: 'line', selector: 'underline' }
+  ];
+
+  const partialKeyAttributeAttrs = {
+    ...ellipseAttrs,
+    underline: {
+      ref: 'label',
+      refX: '0%',
+      refY: '100%',
+      stroke: '#000000',
+      strokeDasharray: '4,3',
+      strokeWidth: 1,
+      x2: 'calc(w)'
+    }
+  };
+
+  const multivaluedAttributeMarkup = [
+    { tagName: 'ellipse', selector: 'body' },
+    { tagName: 'ellipse', selector: 'inner' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const multivaluedAttributeAttrs = {
+    inner: {
+      rx: elementWidth / 2 - 5,
+      ry: elementHeight / 2 - 5,
+      cx: elementWidth / 2,
+      cy: elementHeight / 2,
+      fill: 'none',
+      stroke: '#000000',
+      strokeWidth: 2
+    },
+    ...ellipseAttrs,
+  };
+
+  const derivedAttributeMarkup = ellipseMarkup
+
+  const derivedAttributeAttrs = {
+    ...ellipseAttrs,
+    body: {
+      ...ellipseAttrs.body,
+      strokeDasharray: '5,5'
     }
   };
 
@@ -819,7 +894,6 @@ export default function Home() {
   ]
 
   useEffect(() => {
-    console.log(1, selectedElement)
     if (selectedElement) {
       setElementConfigurationUI(getElementConfigurationUI(selectedElement))
     } else {
@@ -829,7 +903,6 @@ export default function Home() {
 
   function getElementConfigurationUI(element: dia.Element) {
 
-    console.log(element.attr())
     switch (element.attr().elementType) {
       case "attribute":
         return getAttributeConfigUI(element)
@@ -858,26 +931,139 @@ export default function Home() {
   }
 
   function getAttributeConfigUI(element: dia.Element) {
+
+    var attributes = element.attr()
+
+    var color = attributes?.body?.fill
+    var subType = attributes?.elementSubType
+    var text = attributes?.label?.text
+
+    function changeSubType(val: string) {
+      element.prop('attrs/elementSubType', val)
+      switch (val) {
+        case 'key': {
+          morphShape(element, keyAttributeMarkup, keyAttributeAttrs)
+          removeAllSubAttributes()
+          break
+        }
+        case 'partial_key': {
+          morphShape(element, partialKeyAttributeMarkup, partialKeyAttributeAttrs)
+          removeAllSubAttributes()
+          break
+        }
+        case 'derived': {
+          morphShape(element, derivedAttributeMarkup, derivedAttributeAttrs)
+          removeAllSubAttributes()
+          break
+        }
+        case 'multivalued': {
+          morphShape(element, multivaluedAttributeMarkup, multivaluedAttributeAttrs)
+          removeAllSubAttributes()
+          break
+        }
+        case 'regular': {
+          morphShape(element, ellipseMarkup, ellipseAttrs)
+          removeAllSubAttributes()
+          break
+        }
+        case 'composite': {
+          morphShape(element, ellipseMarkup, ellipseAttrs)
+          addConnectedElementBelow(element, `Sub-Attribute ${connectedElements.length}`, (attributes.elementNum + 1) % 3)
+          break
+        }
+      }
+    }
+
+    function removeAllSubAttributes() {
+      connectedElements?.filter(e => filterConnections(e)).forEach(e => e.remove())
+    }
+
+    function filterConnections(e: dia.Element) {
+      if (e.attr().elementType != 'attribute') {
+        return false
+      }
+
+      if (e.attr().elementSubType == 'composite' && (3 + element.attr().elementNum - 1) % 3 == e.attr().elementNum) {
+        return false
+      }
+
+      return true
+    }
+
     return getConfigUILayout("Attribute",
       <>
-      </>
+        <Stack sx={{ width: 1 }} spacing={1}>
+          <Typography variant="h4">Settings:</Typography>
+          <TextField id="outlined-basic" label="Name" defaultValue={text} variant="outlined" onChange={(e) => changeName(element, e.target.value)} />
+          <Stack direction="row" spacing={1} sx={{ width: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel id="type">Type</InputLabel>
+              <Select
+                labelId="type"
+                id="type"
+                label="Type"
+                defaultValue={subType}
+                onChange={(e) => changeSubType(e.target.value)}
+              >
+                <MUI.MenuItem value={'regular'}>Regular</MUI.MenuItem>
+                <MUI.MenuItem value={'key'}>Key</MUI.MenuItem>
+                <MUI.MenuItem value={'partial_key'}>Partial Key</MUI.MenuItem>
+                <MUI.MenuItem value={'derived'}>Derived</MUI.MenuItem>
+                <MUI.MenuItem value={'multivalued'}>Multivalued</MUI.MenuItem>
+                <MUI.MenuItem value={'composite'}>Composite</MUI.MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel id="color">Color</InputLabel>
+              <Select
+                labelId="color"
+                id="color"
+                label="Color"
+                defaultValue={color}
+                onChange={(e) => changeCellColor(element, e.target.value)}
+              >
+                {colors.map((color) =>
+                  <MUI.MenuItem value={color.value}>{color.name}</MUI.MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          </Stack>
+        </Stack>
+        {element.attr().elementSubType == 'composite' &&
+          <Stack sx={{ width: 1 }} spacing={1}>
+            <Typography variant="h4">Sub-Attributes:</Typography>
+            <Button fullWidth variant='contained' onClick={() => { addConnectedElementBelow(element, `Sub-Attribute ${connectedElements.length}`, (attributes.elementNum + 1) % 3) }}>Add Sub-Attribute</Button>
+            <Stack sx={{ width: 1 }} alignItems="center">
+              {connectedElements?.filter(e => filterConnections(e)).map((attr: dia.Element, idx: number) =>
+                <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
+                  <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
 
+                    <Typography variant="h5" sx={{ px: 1 }}>{idx}.</Typography>
+                    <TextField sx={{ width: 1 }} id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr.attr()?.label?.text} onChange={(e) => changeAttributeName(e.target.value, attr.cid)} />
+                    <IconButton aria-label="delete" color="error" onClick={() => deleteAttribute(attr.cid)} sx={{ aspectRatio: 1 }}>
+                      <HighlightOffIcon />
+                    </IconButton>
+                  </Stack>
+                </li>
+              )}
+            </Stack>
+          </Stack>
+        }
+      </>
     )
+
   }
 
   function addConnectedElementBelow(
     sourceElement: dia.Element,
     label: string,
+    elementNum: number = 0,
     offsetY: number = 100,
   ) {
     const sourcePosition = sourceElement.position();
 
     const shape = new MorphableShape()
-    morphShape(shape, ellipseMarkup, ellipseAttrs)
-
-    shape.position(sourcePosition.x, sourcePosition.y + offsetY);
-    shape.resize(elementWidth, elementHeight);
-    shape.attr('label', { text: label });
+    addElement('attribute', shape, false, sourcePosition.x, sourcePosition.y + offsetY, label, elementNum)
 
     const link = singleLine.clone();
     link.source(sourceElement);
@@ -889,6 +1075,23 @@ export default function Home() {
     return shape;
   }
 
+  function changeAttributeName(val: string, cid: string) {
+    connectedElements.find(e => e.cid == cid)?.prop('attrs/label/text', val);
+  }
+
+  function deleteAttribute(cid: string) {
+    connectedElements.find(e => e.cid == cid)?.remove()
+    setConnectedElements(prev => prev.filter((e) => e.cid !== cid));
+  }
+
+  function changeName(element: dia.Element, val: string) {
+    element.prop('attrs/label/text', val);
+  }
+
+  function changeCellColor(element: dia.Element, val: string) {
+    element.prop('attrs/body/fill', val);
+  }
+
   function getEntityConfigUI(element: dia.Element) {
 
     var attributes = element.attr()
@@ -898,25 +1101,6 @@ export default function Home() {
     var text = attributes?.label?.text
 
     //var connectedElements = graphRef.current?.getNeighbors(element);
-
-    console.log(connectedElements)
-
-    function changeAttributeName(val: string, idx: number) {
-      connectedElements?.[idx].prop('attrs/label/text', val);
-    }
-
-    function deleteAttribute(idx: number) {
-      connectedElements?.[idx].remove()
-      setConnectedElements(prev => prev.filter((_, i) => i !== idx));
-    }
-
-    function changeName(val: string) {
-      element.prop('attrs/label/text', val);
-    }
-
-    function changeCellColor(val: string) {
-      element.prop('attrs/body/fill', val);
-    }
 
     function changeSubType(val: string) {
       element.prop('attrs/elementSubType', val)
@@ -936,15 +1120,11 @@ export default function Home() {
       }
     }
 
-
-    // TODO: Get attributes through element connections
-
-    const attrs = ["street", "number", "name", "hour"]
     return getConfigUILayout("Entity",
       <>
         <Stack sx={{ width: 1 }} spacing={1}>
           <Typography variant="h4">Settings:</Typography>
-          <TextField id="outlined-basic" label="Name" defaultValue={text} variant="outlined" onChange={(e) => changeName(e.target.value)} />
+          <TextField id="outlined-basic" label="Name" defaultValue={text} variant="outlined" onChange={(e) => changeName(element, e.target.value)} />
           <Stack direction="row" spacing={1} sx={{ width: 1 }}>
             <FormControl fullWidth>
               <InputLabel id="type">Type</InputLabel>
@@ -955,7 +1135,6 @@ export default function Home() {
                 defaultValue={subType}
                 onChange={(e) => changeSubType(e.target.value)}
               >
-                {/* TODO: change these selections to be something valid*/}
                 <MUI.MenuItem value={'regular'}>Regular</MUI.MenuItem>
                 <MUI.MenuItem value={'weak'}>Weak</MUI.MenuItem>
                 <MUI.MenuItem value={'associative'}>Associative</MUI.MenuItem>
@@ -968,7 +1147,7 @@ export default function Home() {
                 id="color"
                 label="Color"
                 defaultValue={color}
-                onChange={(e) => changeCellColor(e.target.value)}
+                onChange={(e) => changeCellColor(element, e.target.value)}
               >
                 {colors.map((color) =>
                   <MUI.MenuItem value={color.value}>{color.name}</MUI.MenuItem>
@@ -979,15 +1158,15 @@ export default function Home() {
         </Stack>
         <Stack sx={{ width: 1 }} spacing={1}>
           <Typography variant="h4">Attributes:</Typography>
-          <Button fullWidth variant='contained' onClick={() => {addConnectedElementBelow(element, `Attribute ${connectedElements.length}`)}}>Add Attribute</Button>
+          <Button fullWidth variant='contained' onClick={() => { addConnectedElementBelow(element, `Attribute ${connectedElements.length}`) }}>Add Attribute</Button>
           <Stack sx={{ width: 1 }} alignItems="center">
             {connectedElements?.map((attr: dia.Element, idx: number) =>
               <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
                 <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
 
                   <Typography variant="h5" sx={{ px: 1 }}>{idx}.</Typography>
-                  <TextField sx={{ width: 1 }} id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr.attr()?.label?.text} onChange={(e) => changeAttributeName(e.target.value, idx)} />
-                  <IconButton aria-label="delete" color="error" onClick={() => deleteAttribute(idx)} sx={{ aspectRatio: 1 }}>
+                  <TextField sx={{ width: 1 }} id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr.attr()?.label?.text} onChange={(e) => changeAttributeName(e.target.value, attr.cid)} />
+                  <IconButton aria-label="delete" color="error" onClick={() => deleteAttribute(attr.cid)} sx={{ aspectRatio: 1 }}>
                     <HighlightOffIcon />
                   </IconButton>
                 </Stack>
@@ -999,7 +1178,7 @@ export default function Home() {
     )
   }
 
-  function getRelationshipConfigUI(element: dia.Element) {
+  function getRelationshipConfigUI(_: dia.Element) {
 
     return getConfigUILayout("Relationship",
       <Typography>Relationship: </Typography>
