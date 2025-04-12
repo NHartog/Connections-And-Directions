@@ -575,7 +575,7 @@ export default function CrowsNotation() {
                                                         const value = e.target.value;
                                                         const links = graph?.getConnectedLinks(selectedEntity!);
 
-                                                        const linkToUpdate = links.find(link => {
+                                                        const linkToUpdate = links?.find(link => {
                                                             const sourceId = link.get('source')?.id;
                                                             const targetId = link.get('target')?.id;
                                                             return (
@@ -616,8 +616,8 @@ export default function CrowsNotation() {
                                                 {entity.attr('headerText/text') || 'Unnamed Entity'}
                                             </Typography>
                                             <IconButton onClick={() => {
-                                                const links = graph.getConnectedLinks(selectedEntity!);
-                                                const linkToRemove = links.find(link => {
+                                                const links = graph?.getConnectedLinks(selectedEntity!);
+                                                const linkToRemove = links?.find(link => {
                                                     const sourceId = link.get('source')?.id;
                                                     const targetId = link.get('target')?.id;
                                                     return (

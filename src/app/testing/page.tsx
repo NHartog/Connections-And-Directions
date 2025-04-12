@@ -1,11 +1,10 @@
 'use client'
 import { Box, Button, ButtonGroup, FormControl, IconButton, InputLabel, Popover, Select, SpeedDial, SpeedDialAction, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import * as MUI from '@mui/material';
-import { dia, shapes, highlighters, elementTools, linkTools } from '@joint/core';
+import { dia, shapes, elementTools, linkTools } from '@joint/core';
 import { Menu, MenuItem } from "@spaceymonk/react-radial-menu";
 import * as joint from '@joint/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AvoidRouter } from './avoid-router';
 import SaveIcon from "@mui/icons-material/Save";
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import FileUploadIcon from "@mui/icons-material/FileUpload";
@@ -23,14 +22,17 @@ type ChenOptions = "attribute" | "entity" | "relationship"
 
 export default function Home() {
   const [paper, setPaper] = useState<dia.Paper>()
-  const [graph, setGraph] = useState<dia.Graph>()
-  const [selectedElement, setSelectedElement] = useState<dia.Element>()
+  const graphRef = useRef<dia.Graph>(null)
+  const [selectedElement, _setSelectedElement] = useState<dia.Element>()
+  const selectedElementRef = useRef<dia.Element>(undefined)
+  const [connectedElements, setConnectedElements] = useState<dia.Element[]>([])
   const [elementConfigurationUI, setElementConfigurationUI] = useState<React.JSX.Element>(<></>);
   const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
   const [selectionManager, setSelectionManager] = useState<SelectionManager>();
   const [shouldShowSelectionWheel, setShowSelectionWheel] = React.useState(false);
   const [positionSelectionWheel, setPositionSelectionWheel] = React.useState({ x: 0, y: 0 });
   const [helpAnchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+
   const isHelpOpen = Boolean(helpAnchorEl);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shiftHeld = useRef<boolean>(false)
@@ -39,7 +41,43 @@ export default function Home() {
   const width = 8000 // in pixels
   const height = 8000 // in pixels
   const elementWidth = 150 // in pixels
-  const elementHeight = 50 // in pixels
+  const elementHeight = 80 // in pixels
+  const colors = [
+    {
+      name: 'Blue',
+      value: '#AEC6CF' // Pastel Blue
+    },
+    {
+      name: 'Orange',
+      value: '#FFDAB9' // Pastel Orange (Peach Puff)
+    },
+    {
+      name: 'Yellow',
+      value: '#FFFFE0' // Light Pastel Yellow (Light Yellow)
+    },
+    {
+      name: 'Green',
+      value: '#B0E57C' // Pastel Green
+    },
+    {
+      name: 'Red',
+      value: '#FFB6C1' // Light Pink / Pastel Red
+    },
+    {
+      name: 'White',
+      value: '#FFFFFF' // White
+    },
+    {
+      name: 'Grey',
+      value: '#D3D3D3' // Light Grey
+    },
+  ]
+
+  function setSelectedElement(element: dia.Element | undefined) {
+    selectedElementRef.current = element
+    refreshNeighbors()
+    _setSelectedElement(element)
+  }
 
   const handleHelpClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -55,6 +93,21 @@ export default function Home() {
       fileInputRef.current.click(); // Opens file dialog
     }
   };
+
+  const refreshNeighbors = () => {
+    if (selectedElementRef.current) {
+      var elements = graphRef.current?.getNeighbors(selectedElementRef.current)
+      if (elements) {
+        setConnectedElements(elements)
+      }
+    } else {
+      setConnectedElements([])
+    }
+  }
+
+  useEffect(() => {
+    refreshNeighbors()
+  }, [])
 
   useEffect(() => {
 
@@ -261,11 +314,13 @@ export default function Home() {
   //Note, the creation of the paper must be inside the useEffect to allow the div with id "paper" to exist before its initialization
   useEffect(() => {
     // create paper
-    const namespace = shapes;
-
+    const namespace = {
+      ...shapes,
+      morphable: { Standard: MorphableShape }
+    }
 
     const graph = new dia.Graph({}, { cellNamespace: namespace });
-    setGraph(graph)
+    graphRef.current = graph
 
     const paper = new dia.Paper({
       el: document.getElementById('joinjs_graph'),
@@ -334,106 +389,22 @@ export default function Home() {
       elementView.hideTools();
     });
 
-    const routerWorker = new Worker(new URL("./worker.js", import.meta.url));
-
-    routerWorker.onmessage = (e) => {
-      const { command, ...data } = e.data;
-      switch (command) {
-        case 'routed': {
-          const { cells } = data;
-          cells.forEach((cell: joint.dia.Link) => {
-            const model = graph.getCell(cell.id);
-            if (model.isElement()) return;
-            model.set({
-              vertices: cell.vertices,
-              source: cell.source,
-              target: cell.target,
-              router: null
-            }, {
-              fromWorker: true
-            });
-          });
-          highlighters.addClass.removeAll(paper, 'awaiting-update');
-          break;
-        }
-        default:
-          console.log('Unknown command', command);
-          break;
-      }
-    }
-
-    routerWorker.postMessage([{
-      command: 'reset',
-      cells: graph.toJSON().cells
-    }]);
-
-    graph.on('change', (cell, opt) => {
-
-      if (opt.fromWorker) {
-        return;
-      }
-
-      if (graph.getElements().find(el => el.id == "selectionBBOXElement")) {
-        return;
-      }
-
-      routerWorker.postMessage([{
-        command: 'change',
-        cell: cell.toJSON()
-      }]);
-
-      if (cell.isElement() && (cell.hasChanged('position') || cell.hasChanged('size'))) {
-        const links = graph.getConnectedLinks(cell);
-        links.forEach((link) => {
-          link.router() || link.router('rightAngle');
-          highlighters.addClass.add(link.findView(paper), 'line', 'awaiting-update', {
-            className: 'awaiting-update'
-          });
-        });
-      }
-
-    });
-
-    graph.on('remove', (cell) => {
-      if (cell.id == "selectionBBOXElement") {
-        return
-      }
-      routerWorker.postMessage([{
-        command: 'remove',
-        id: cell.id
-      }]);
-    });
-
-    graph.on('add', (cell) => {
-      if (cell.id == "selectionBBOXElement") {
-        return
-      }
-      routerWorker.postMessage([{
-        command: 'add',
-        cell: cell.toJSON()
-      }]);
-    });
-
-    paper.on('link:snap:disconnect', (linkView) => {
-      linkView.model.set({
-        vertices: [],
-        router: null
-      });
-    });
-
-    AvoidRouter.load().then(() => {
-      const router = new AvoidRouter(graph, {
-        shapeBufferDistance: 20,
-        idealNudgingDistance: 10,
-        portOverflow: 8,
-      });
-
-      router.addGraphListeners();
-      router.routeAll();
-    });
+    graph.on('remove', (cell: dia.Cell) => {
+      fixSelectedElement(cell)
+    })
 
     setPaper(paper)
   }, [])
+
+  const fixSelectedElement = (element: dia.Cell) => {
+    console.log("hah")
+    console.log(element)
+    console.log(selectedElementRef.current)
+    if (element.cid == selectedElementRef.current?.cid) {
+      console.log('made it')
+      setSelectedElement(undefined)
+    }
+  }
 
   function isInput(event: KeyboardEvent) {
 
@@ -451,7 +422,7 @@ export default function Home() {
     console.log(event)
     if (event.key === 'Delete' || event.key === 'Backspace' && !isInput(event)) {
       if (selectionManager) {
-        graph?.removeCells(selectionManager?.getSelectedElements())
+        graphRef.current?.removeCells(selectionManager?.getSelectedElements())
         selectionManager?.clearSelection()
       }
     }
@@ -459,7 +430,7 @@ export default function Home() {
     if (event.key == 'Escape') {
       selectionManager?.clearSelection()
     }
-  }, [selectionManager, graph]);
+  }, [selectionManager, graphRef.current]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -471,17 +442,33 @@ export default function Home() {
   }, [handleKeyDown]);
 
   const addElement = (name: ChenOptions, shape: dia.Element, useWheel: boolean) => {
-    if (graph && paper) {
+    if (graphRef.current && paper) {
       //shape.addTo(graph);
       const x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
       const y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5 // To note, the 36.5 is the height of the header
 
       console.log(transformWrapperRef.current)
       console.log(x, y)
+      switch (name) {
+        case 'relationship': {
+          morphShape(shape, diamondMarkup, diamondAttrs)
+          break
+        }
+        case 'entity': {
+          morphShape(shape, rectangleMarkup, rectangleAttrs)
+          break
+        }
+        case 'attribute': {
+          morphShape(shape, ellipseMarkup, ellipseAttrs)
+          break
+        }
+      }
+
       shape.position(x - elementWidth / 2, y - elementHeight / 2);
       shape.resize(elementWidth, elementHeight);
       shape.attr('label', { text: name });
       shape.attr('elementType', name)
+      shape.attr('elementSubType', 'regular')
       // Define ports separately
 
       // 1) Create element tools
@@ -503,29 +490,22 @@ export default function Home() {
         tools: [boundaryTool, removeButton, connectTool]
       });
 
-      shape.addTo(graph)
+      shape.addTo(graphRef.current)
       // 3) Attach the tools to the original shape's view
       const shapeView = shape.findView(paper);
       shapeView.addTools(toolsView);
       shapeView.hideTools(); // Hide the tools
-
-
-      if (shape instanceof shapes.standard.Polygon) {
-        shape.attr('body/refPoints', '50,0 100,50 50,100 0,50');
-      }
-
-
     }
   }
 
 
   function onSave() {
     // Convert JSON object to string
-    if (!graph) {
+    if (!graphRef.current) {
       return;
     }
 
-    const jsonString = JSON.stringify(graph.toJSON(), null, 2)
+    const jsonString = JSON.stringify(graphRef.current.toJSON(), null, 2)
 
     // Create a Blob with JSON data
     const blob = new Blob([jsonString], { type: "application/json" });
@@ -557,8 +537,8 @@ export default function Home() {
       try {
         const text = e.target?.result as string; // Read file content
         const json = JSON.parse(text); // Parse JSON
-        if (graph) {
-          graph.fromJSON(json)
+        if (graphRef.current) {
+          graphRef.current.fromJSON(json)
         }
         console.log("Imported JSON:", json);
       } catch (error) {
@@ -570,16 +550,249 @@ export default function Home() {
     reader.readAsText(file); // Read file as text
   };
 
+  const MorphableShape = dia.Element.define('morphable.Standard', {
+    size: { width: 100, height: 60 },
+    attrs: {
+      body: {
+        fill: '#FFFFFF',
+        stroke: '#000000'
+      },
+      label: {
+        text: 'Label',
+        refX: '50%',
+        refY: '50%',
+        textAnchor: 'middle',
+        yAlignment: 'middle',
+        fontSize: 14
+      }
+    }
+  }, {
+    markup: [
+      { tagName: 'rect', selector: 'body' },
+      { tagName: 'text', selector: 'label' }
+    ]
+  });
+
+  function morphShape(
+    element: dia.Element,
+    newMarkup: dia.MarkupNodeJSON[],
+    newAttrs: dia.Element.Attributes['attrs']
+  ) {
+    const currentAttrs = element.attr();
+
+    // Get preserved values
+    const currentFill = currentAttrs?.body?.fill || '#FFFFFF';
+    const currentStroke = currentAttrs?.body?.stroke || '#000000';
+    const currentLabelText = currentAttrs?.label?.text || 'Label';
+
+    const currentElementType = currentAttrs?.elementType;
+    const currentElementSubType = currentAttrs?.elementSubType;
+
+    // Deep clone to avoid mutation
+    const mergedAttrs = JSON.parse(JSON.stringify(newAttrs));
+
+    // Restore style
+    if (mergedAttrs.body) {
+      mergedAttrs.body.fill = currentFill;
+      mergedAttrs.body.stroke = currentStroke;
+    }
+
+    // Restore label
+    if (mergedAttrs.label) {
+      mergedAttrs.label.text = currentLabelText;
+    }
+
+    // Restore custom attributes
+    if (currentElementType !== undefined) {
+      mergedAttrs.elementType = currentElementType;
+    }
+
+    if (currentElementSubType !== undefined) {
+      mergedAttrs.elementSubType = currentElementSubType;
+    }
+
+    // Apply morph
+    element.set('markup', newMarkup);
+    element.set('attrs', mergedAttrs);
+  }
+
+  const weakEntityMarkup = [
+    { tagName: 'rect', selector: 'body' }, // "body" is the outer rectangle, for compatibility
+    { tagName: 'rect', selector: 'inner' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const weakEntityAttrs = {
+    inner: {
+      width: elementWidth - 10,
+      height: elementHeight - 10,
+      ref: 'root',
+      refX: '5',
+      refY: '5',
+      fill: 'none',
+      stroke: '#000000',
+      strokeWidth: 2
+    },
+    body: {
+      width: elementWidth,
+      height: elementHeight,
+      fill: '#FFFFFF',
+      stroke: '#000000',
+      strokeWidth: 2
+    },
+    label: {
+      text: 'WeakEntity',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '90%',
+        height: '90%',
+        ellipsis: true
+      }
+    }
+  };
+
+  const associativeEntityMarkup = [
+    { tagName: 'rect', selector: 'body' },
+    { tagName: 'path', selector: 'path' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const associativeEntityAttrs = {
+    body: {
+      width: elementWidth,
+      height: elementHeight,
+      fill: '#FFFFFF',
+      stroke: '#000000',
+      strokeWidth: 2,
+    },
+    path: {
+      //refX: '5%',
+      //refY: '5%',
+      d: `M${elementWidth / 2},1 L${elementWidth - 3},${elementHeight / 2} L${elementWidth / 2},${elementHeight - 1} L3,${elementHeight / 2} Z`,  // Path representing a diamond shape
+      fill: 'none',
+      stroke: '#000000',
+      strokeWidth: 2
+    },
+    label: {
+      text: 'AssocEntity',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '60%',
+        height: '60%',
+        ellipsis: true
+      }
+    }
+  };
+
+  const rectangleMarkup = [
+    { tagName: 'rect', selector: 'body' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const rectangleAttrs = {
+    body: {
+      width: elementWidth,
+      height: elementHeight,
+      fill: '#FFFFFF',
+      strokeWidth: 2,
+      stroke: '#000000'
+    },
+    label: {
+      text: 'Rectangle',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '90%',
+        height: '90%',
+        ellipsis: true
+      }
+    }
+  };
+
+  const diamondMarkup = [
+    { tagName: 'polygon', selector: 'body' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const diamondAttrs = {
+    body: {
+      refPoints: '50,5 95,30 50,55 5,30',  // Polygon points forming the diamond
+      // 50,0 100,50 50,100 0,50
+      fill: '#FFFFFF',
+      strokeWidth: 2,
+      stroke: '#000000'
+    },
+    label: {
+      text: 'Diamond',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '60%',
+        height: '60%',
+        ellipsis: true
+      }
+    }
+  };
+
+  const ellipseMarkup = [
+    { tagName: 'ellipse', selector: 'body' },
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const ellipseAttrs = {
+    body: {
+      rx: elementWidth / 2,     // Horizontal radius
+      ry: elementHeight / 2,    // Vertical radius
+      cx: elementWidth / 2,
+      cy: elementHeight / 2,
+      fill: '#FFFFFF',
+      strokeWidth: 2,
+      stroke: '#000000'
+    },
+    label: {
+      text: 'Ellipse',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '70%',
+        height: '70%',
+        ellipsis: true
+      }
+    }
+  };
+
   function handleSelection(option: ChenOptions, useWheel: boolean = false) {
     switch (option) {
       case "attribute":
-        addElement('attribute', new shapes.standard.Ellipse(), useWheel)
+        addElement('attribute', new MorphableShape(), useWheel)
         break;
       case "entity":
-        addElement('entity', new shapes.standard.Rectangle(), useWheel)
+        addElement('entity', new MorphableShape(), useWheel)
         break;
       case "relationship":
-        addElement('relationship', new shapes.standard.Polygon(), useWheel)
+        addElement('relationship', new MorphableShape(), useWheel)
         break;
     }
 
@@ -612,10 +825,11 @@ export default function Home() {
     } else {
       setElementConfigurationUI(<></>)
     }
-  }, [selectedElement])
+  }, [selectedElement, connectedElements])
 
   function getElementConfigurationUI(element: dia.Element) {
 
+    console.log(element.attr())
     switch (element.attr().elementType) {
       case "attribute":
         return getAttributeConfigUI(element)
@@ -630,12 +844,12 @@ export default function Home() {
 
   function getConfigUILayout(label: string, children: React.JSX.Element) {
     return (
-      <Stack sx={{ width: 1, height: 'auto', pt: 1 }} alignItems="center" direction="column" spacing={3}>
+      <Stack key={Math.random()} sx={{ width: 1, height: 'auto', pt: 1 }} alignItems="center" direction="column" spacing={3}>
         <MUI.Paper elevation={5} sx={{ textAlign: 'center', width: 0.8, p: 2 }}>
           <Typography variant="h3">{label}</Typography>
         </MUI.Paper>
         <Box sx={{ width: 1, height: 1, display: 'inline-block' }}>
-          <Stack sx={{ width: 'auto', height: 'auto', p:1 }} alignItems="center" direction="column" spacing={1}>
+          <Stack sx={{ width: 'auto', height: 'auto', p: 1 }} alignItems="center" direction="column" spacing={1}>
             {children}
           </Stack>
         </Box>
@@ -651,9 +865,77 @@ export default function Home() {
     )
   }
 
+  function addConnectedElementBelow(
+    sourceElement: dia.Element,
+    label: string,
+    offsetY: number = 100,
+  ) {
+    const sourcePosition = sourceElement.position();
+
+    const shape = new MorphableShape()
+    morphShape(shape, ellipseMarkup, ellipseAttrs)
+
+    shape.position(sourcePosition.x, sourcePosition.y + offsetY);
+    shape.resize(elementWidth, elementHeight);
+    shape.attr('label', { text: label });
+
+    const link = singleLine.clone();
+    link.source(sourceElement);
+    link.target(shape);
+
+    graphRef.current?.addCells([shape, link]);
+    setConnectedElements(prev => [...prev, shape]);
+
+    return shape;
+  }
+
   function getEntityConfigUI(element: dia.Element) {
 
-    console.log(element.attr())
+    var attributes = element.attr()
+
+    var color = attributes?.body?.fill
+    var subType = attributes?.elementSubType
+    var text = attributes?.label?.text
+
+    //var connectedElements = graphRef.current?.getNeighbors(element);
+
+    console.log(connectedElements)
+
+    function changeAttributeName(val: string, idx: number) {
+      connectedElements?.[idx].prop('attrs/label/text', val);
+    }
+
+    function deleteAttribute(idx: number) {
+      connectedElements?.[idx].remove()
+      setConnectedElements(prev => prev.filter((_, i) => i !== idx));
+    }
+
+    function changeName(val: string) {
+      element.prop('attrs/label/text', val);
+    }
+
+    function changeCellColor(val: string) {
+      element.prop('attrs/body/fill', val);
+    }
+
+    function changeSubType(val: string) {
+      element.prop('attrs/elementSubType', val)
+      switch (val) {
+        case 'associative': {
+          morphShape(element, associativeEntityMarkup, associativeEntityAttrs)
+          break
+        }
+        case 'weak': {
+          morphShape(element, weakEntityMarkup, weakEntityAttrs)
+          break
+        }
+        case 'regular': {
+          morphShape(element, rectangleMarkup, rectangleAttrs)
+          break
+        }
+      }
+    }
+
 
     // TODO: Get attributes through element connections
 
@@ -662,7 +944,7 @@ export default function Home() {
       <>
         <Stack sx={{ width: 1 }} spacing={1}>
           <Typography variant="h4">Settings:</Typography>
-          <TextField id="outlined-basic" label="Name" variant="outlined" />
+          <TextField id="outlined-basic" label="Name" defaultValue={text} variant="outlined" onChange={(e) => changeName(e.target.value)} />
           <Stack direction="row" spacing={1} sx={{ width: 1 }}>
             <FormControl fullWidth>
               <InputLabel id="type">Type</InputLabel>
@@ -670,12 +952,13 @@ export default function Home() {
                 labelId="type"
                 id="type"
                 label="Type"
-                defaultValue=''
+                defaultValue={subType}
+                onChange={(e) => changeSubType(e.target.value)}
               >
                 {/* TODO: change these selections to be something valid*/}
-                <MUI.MenuItem value={10}>Ten</MUI.MenuItem>
-                <MUI.MenuItem value={20}>Twenty</MUI.MenuItem>
-                <MUI.MenuItem value={30}>Thirty</MUI.MenuItem>
+                <MUI.MenuItem value={'regular'}>Regular</MUI.MenuItem>
+                <MUI.MenuItem value={'weak'}>Weak</MUI.MenuItem>
+                <MUI.MenuItem value={'associative'}>Associative</MUI.MenuItem>
               </Select>
             </FormControl>
             <FormControl fullWidth>
@@ -684,30 +967,33 @@ export default function Home() {
                 labelId="color"
                 id="color"
                 label="Color"
-                defaultValue=''
+                defaultValue={color}
+                onChange={(e) => changeCellColor(e.target.value)}
               >
-                {/* TODO: change these selections to be something valid*/}
-                <MUI.MenuItem value={10}>Ten</MUI.MenuItem>
-                <MUI.MenuItem value={20}>Twenty</MUI.MenuItem>
-                <MUI.MenuItem value={30}>Thirty</MUI.MenuItem>
+                {colors.map((color) =>
+                  <MUI.MenuItem value={color.value}>{color.name}</MUI.MenuItem>
+                )}
               </Select>
             </FormControl>
           </Stack>
         </Stack>
-        <Stack sx={{ width: 1 }} alignItems="center">
+        <Stack sx={{ width: 1 }} spacing={1}>
           <Typography variant="h4">Attributes:</Typography>
-          {attrs.map((attr: string, idx: number) =>
-            <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0 }}>
-              <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
+          <Button fullWidth variant='contained' onClick={() => {addConnectedElementBelow(element, `Attribute ${connectedElements.length}`)}}>Add Attribute</Button>
+          <Stack sx={{ width: 1 }} alignItems="center">
+            {connectedElements?.map((attr: dia.Element, idx: number) =>
+              <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
+                <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
 
-                <Typography variant="h5" sx={{ px: 1 }}>{idx}.</Typography>
-                <TextField id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr} />
-                <IconButton aria-label="delete" color="error" sx={{ aspectRatio: 1 }}>
-                  <HighlightOffIcon />
-                </IconButton>
-              </Stack>
-            </li>
-          )}
+                  <Typography variant="h5" sx={{ px: 1 }}>{idx}.</Typography>
+                  <TextField sx={{ width: 1 }} id="outlined-basic" label="Attribute Name" variant="outlined" defaultValue={attr.attr()?.label?.text} onChange={(e) => changeAttributeName(e.target.value, idx)} />
+                  <IconButton aria-label="delete" color="error" onClick={() => deleteAttribute(idx)} sx={{ aspectRatio: 1 }}>
+                    <HighlightOffIcon />
+                  </IconButton>
+                </Stack>
+              </li>
+            )}
+          </Stack>
         </Stack>
       </>
     )
@@ -722,7 +1008,7 @@ export default function Home() {
 
   return (
     <Stack direction="row" sx={{ width: '100%', height: '100%' }}>
-      <Box sx={{ width: 'calc(100% - 300px)', height: '100%' }}>
+      <Box sx={{ width: 'calc(100% - 350px)', height: '100%' }}>
         <Menu
           centerX={positionSelectionWheel.x}
           centerY={positionSelectionWheel.y}
@@ -757,7 +1043,7 @@ export default function Home() {
             <Button onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
           </Tooltip>
         </ButtonGroup>
-        <Box sx={{ position: 'fixed', zIndex: 2, right: 316, paddingTop: 1 }}>
+        <Box sx={{ position: 'fixed', zIndex: 2, right: 366, paddingTop: 1 }}>
           <Tooltip title="Click for help" arrow>
             <IconButton color="primary" onClick={handleHelpClick} sx={{
               backgroundColor: 'primary.main', // Solid color from your theme
@@ -802,7 +1088,7 @@ export default function Home() {
             </Typography>
           </Popover>
         </Box>
-        <Box sx={{ position: 'fixed', zIndex: 2, bottom: 16, right: 316 }}>
+        <Box sx={{ position: 'fixed', zIndex: 2, bottom: 16, right: 366 }}>
           <input
             type="file"
             accept="application/json"
@@ -893,7 +1179,7 @@ export default function Home() {
           </TransformWrapper>
         </Box>
       </Box>
-      <Box sx={{ backgroundColor: 'white', width: '300px', height: '100%' }}>
+      <Box sx={{ backgroundColor: 'white', width: '350px', height: '100%' }}>
         {elementConfigurationUI}
       </Box>
     </Stack>
