@@ -65,6 +65,8 @@ export default function CrowsNotation() {
     const FG_COLOR = "black";
     const BG_COLOR = "white";
 
+    const shiftHeld = useRef(false);
+
     const handleHelpClick = (event: React.MouseEvent<HTMLElement>) => {
         setHelpAnchorEl(event.currentTarget);
     };
@@ -93,6 +95,55 @@ export default function CrowsNotation() {
 
         setCrowMarkers(markers);
     }, []);
+
+    useEffect(() => {
+        const customCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48">
+        <circle cx="24" cy="24" r="18" fill="white" stroke="blue" stroke-width="2"/>
+        <text x="50%" y="55%" font-size="24" font-weight="bold" text-anchor="middle" fill="blue" dominant-baseline="middle">+</text>
+      </svg>
+    `)}'), auto`;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                shiftHeld.current = true;
+                document.body.style.cursor = customCursor;
+            }
+
+            const isTextInput =
+                (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement);
+
+            if (isTextInput) return;
+
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEntity) {
+                selectedEntity.remove();
+                console.log(selectedEntity)
+                setSelectedEntity(null);
+            }
+
+            if (e.key === 'Escape') {
+                selectedEntity?.remove()
+                setSelectedEntity(null);
+            }
+        };
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            // Reset on any key release if Shift is no longer being held
+            if (!e.shiftKey) {
+                shiftHeld.current = false;
+                document.body.style.cursor = 'auto';
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keyup', handleKeyUp);
+        };
+    }, []);
+
 
     useEffect(() => {
         console.log('Sidebar should re-render with:', connectedEntities);
@@ -148,6 +199,7 @@ export default function CrowsNotation() {
         });
 
         paper.on('element:pointerclick', (elementView) => {
+            console.log("helo")
             const element = elementView.model;
             if (selectedEntity?.id === element.id) {
                 setSelectedEntity(null);
@@ -156,6 +208,8 @@ export default function CrowsNotation() {
                 highlighters.mask.removeAll(paper);
             } else {
                 setSelectedEntity(element);
+                console.log(selectedEntity)
+
                 setEntityName(element.attr('headerText/text') || "");
                 const rawAttrs = element.attr('bodyText/text')?.split('\n') || [];
                 setAttributes(rawAttrs.map(attr => ({
@@ -376,6 +430,41 @@ export default function CrowsNotation() {
         }
     };
 
+    const addEntityAt = (x: number, y: number) => {
+        if (!graph || !paper) return;
+
+        const entity = new shapes.standard.HeaderedRectangle();
+        entity.position(x, y);
+        entity.resize(elementWidth, elementHeight * (1 + (0.1 * attributes.length)));
+
+        setSelectedEntity(entity);
+        setAttributes([]);
+
+        entity.attr('headerText/text', '');
+        entity.attr('headerText/fontSize', 20);
+        entity.attr('headerText/fontWeight', 'bold');
+        entity.attr('header/fill', '#000000');
+        entity.attr('header/fillOpacity', 0.1);
+        entity.attr('bodyText/text', '');
+        entity.attr('bodyText/fontSize', 15);
+        entity.attr('body/fill', 'rgba(254,133,79,0)');
+        entity.attr('body/fillOpacity', 0.5);
+
+        const boundaryTool = new elementTools.Boundary();
+        const removeButton = new elementTools.Remove({ useModelGeometry: true, x: '10%', y: '50%' });
+        const connectTool = new elementTools.Connect({ useModelGeometry: true, x: '90%', y: '50%' });
+
+        const toolsView = new dia.ToolsView({
+            name: 'basic-tools',
+            tools: [boundaryTool, removeButton, connectTool]
+        });
+
+        entity.addTo(graph);
+        const shapeView = entity.findView(paper);
+        shapeView.addTools(toolsView);
+        shapeView.hideTools();
+    };
+
     const handleSave = () => {
         if (selectedEntity) {
             selectedEntity.attr('headerText/text', entityName);
@@ -488,7 +577,6 @@ export default function CrowsNotation() {
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
-                    <Button onClick={addEntity} variant="contained">Add Entity</Button>
 
 
                 </Box>
@@ -505,6 +593,23 @@ export default function CrowsNotation() {
                             <Box id="crows_foot_graph"
                                  onMouseDown={(e) => {
                                      const target = e.target as HTMLElement;
+
+                                     if (shiftHeld.current && e.button === 0) {
+                                         // SHIFT + Left Click: Add entity at click location
+                                         const rect = boxWrapperRef.current?.getBoundingClientRect();
+                                         const localX = e.clientX - (rect?.left ?? 0);
+                                         const localY = e.clientY - (rect?.top ?? 0);
+
+                                         const transform = transformWrapperRef.current?.instance.transformState;
+                                         const graphX = (localX - (transform?.positionX ?? 0)) / (transform?.scale ?? 1);
+                                         const graphY = (localY - (transform?.positionY ?? 0)) / (transform?.scale ?? 1);
+
+                                         // Call a function to add entity
+                                         addEntityAt(graphX, graphY);
+                                         return;
+                                     }
+
+
                                      if (target.closest('.joint-element')) {
                                          setPanningEnabled(false);
                                      }
@@ -538,7 +643,14 @@ export default function CrowsNotation() {
                     </SpeedDial>
                 </Box>
             </Box>
-            <Box sx={{ position: 'fixed', top: 16, right: 332, zIndex: 2 }}>
+            <Box
+                sx={{
+                    position: 'fixed',
+                    top: 65,                 // aligned with the top button row
+                    right: 300 + 64,         // 300px sidebar + 24px margin
+                    zIndex: 3
+                }}
+            >
                 <Tooltip title="Click for help" arrow>
                     <IconButton
                         color="primary"
@@ -554,23 +666,24 @@ export default function CrowsNotation() {
                         <HelpOutlineIcon />
                     </IconButton>
                 </Tooltip>
+
                 <Popover
                     open={isHelpOpen}
                     anchorEl={helpAnchorEl}
                     onClose={handleHelpClose}
-                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                    transformOrigin={{ vertical: "top", horizontal: "right" }}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 >
                     <Box sx={{ px: 2, py: 1, maxWidth: 300 }}>
                         <Typography variant="h6" gutterBottom>Help Guide</Typography>
-                        <Typography variant="body2"><b>Zoom:</b> Use + and - buttons</Typography>
-                        <Typography variant="body2"><b>Center:</b> Use the "o" button</Typography>
-                        <Typography variant="body2"><b>Reset:</b> Use the "x" button</Typography>
+                        <Typography variant="body2"><b>Zoom:</b> + and -</Typography>
+                        <Typography variant="body2"><b>Reset:</b> x</Typography>
+                        <Typography variant="body2"><b>Center:</b> o</Typography>
                         <Typography variant="body2" sx={{ mt: 1 }}><b>Tips:</b></Typography>
-                        <ul>
-                            <li><Typography variant="body2">Click "Add Entity" to create a new box</Typography></li>
-                            <li><Typography variant="body2">Use the red ❌ to delete attributes</Typography></li>
-                            <li><Typography variant="body2">Use checkboxes to mark attributes as primary</Typography></li>
+                        <ul style={{ paddingLeft: 16, marginTop: 4 }}>
+                            <li><Typography variant="body2">Add entities and attributes</Typography></li>
+                            <li><Typography variant="body2">Drag from the arrow to create links</Typography></li>
+                            <li><Typography variant="body2">Use checkboxes to mark key attributes</Typography></li>
                         </ul>
                     </Box>
                 </Popover>
