@@ -270,7 +270,7 @@ export default function Home() {
     }
   }
 
-  const singleLine = new shapes.standard.Link(
+  const optionalSingleLine = new shapes.standard.DoubleLink(
     {
       z: 0,
       attrs: {
@@ -279,8 +279,44 @@ export default function Home() {
           strokeWidth: 4,     // Line thickness
           strokeLinejoin: 'round',
           strokeLinecap: 'round',
+          strokeDasharray: '10 10',  // Dashed pattern: 10px dash, 5px gap
           targetMarker: { type: 'none' },   // No arrowhead at target
           sourceMarker: { type: 'none' }    // No arrowhead at source
+        },
+        outline: {
+          stroke: 'transparent',
+          strokeWidth: 10,
+        },
+        custom: {
+          type: 'optional'
+        }
+      },
+      connector: {
+        name: 'rounded'
+      }
+    }
+  );
+
+
+  const singleLine = new shapes.standard.DoubleLink(
+    {
+      z: 0,
+      attrs: {
+        line: {
+          stroke: 'black',    // Black line color
+          strokeWidth: 4,     // Line thickness
+          strokeLinejoin: 'round',
+          strokeLinecap: 'round',
+          strokeDasharray: 'none',
+          targetMarker: { type: 'none' },   // No arrowhead at target
+          sourceMarker: { type: 'none' }    // No arrowhead at source
+        },
+        outline: {
+          stroke: 'transparent',
+          strokeWidth: 10,
+        },
+        custom: {
+          type: 'partial'
         }
       },
       connector: {
@@ -297,13 +333,18 @@ export default function Home() {
           stroke: 'white',      // Main line color (white)
           strokeWidth: 2,       // Thickness of the main line
           fill: 'none',
+          strokeDasharray: 'none',
           targetMarker: { type: 'none' },     // Removes arrowhead at target
           sourceMarker: { type: 'none' }
         },
         outline: {
           stroke: 'black',      // Outline color (black)
           strokeWidth: 10,       // Thickness of the outline (should be greater than strokeWidth)
+        },
+        custom: {
+          type: 'total'
         }
+
       },
       connector: {
         name: 'rounded'
@@ -356,11 +397,40 @@ export default function Home() {
         const target = targetView.model;
         if (source.isLink() || target.isLink()) return false;
         if (targetMagnet === sourceMagnet) return false;
+        if (source === target) return false;
+
         if (end === 'target' ? targetMagnet : sourceMagnet) {
           return true;
         }
-        if (source === target) return false;
-        return end === 'target' ? target.isElement() && !target.hasPorts() : source.isElement() && !source.hasPorts();
+
+        // If there is already a link between the two cells, then don't add another link
+        if (getLinkBetweenById(source.id as string, target.id as string)) {
+          return false
+        }
+
+        if (end === 'target' ? target.isElement() && !target.hasPorts() : source.isElement() && !source.hasPorts()) {
+          const sAttr = source.attr()
+          const tAttr = target.attr()
+
+          //Attributes can connection to attributes only if it is composite and visa versa
+          if (sAttr.elementType == 'attribute' && tAttr.elementType == 'attribute' && (sAttr.elementSubType == 'composite' || tAttr.elementSubType == 'composite')) {
+            return true
+          }
+
+          //Attributes can connection to entities and visa versa
+          if ((sAttr.elementType == 'attribute' && tAttr.elementType == 'entity') ||
+            (tAttr.elementType == 'attribute' && sAttr.elementType == 'entity')) {
+            return true
+          }
+
+          //Entities can connect to relationships and visa versa
+          if ((sAttr.elementType == 'relationship' && tAttr.elementType == 'entity') ||
+            (tAttr.elementType == 'relationship' && sAttr.elementType == 'entity')) {
+            return true
+          }
+        }
+
+        return false
       },
       background: { color: '#F5F5F5' },
       cellViewNamespace: namespace
@@ -389,7 +459,7 @@ export default function Home() {
       elementView.hideTools();
     });
 
-    paper.on('link:connect', () => {
+    paper.on('link:connect', (_) => {
       refreshNeighbors()
     })
 
@@ -746,13 +816,47 @@ export default function Home() {
   const diamondAttrs = {
     body: {
       refPoints: '50,5 95,30 50,55 5,30',  // Polygon points forming the diamond
-      // 50,0 100,50 50,100 0,50
       fill: '#FFFFFF',
       strokeWidth: 2,
       stroke: '#000000'
     },
     label: {
       text: 'Diamond',
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      yAlignment: 'middle',
+      fontSize: 14,
+      style: { whiteSpace: 'pre-wrap' },
+      textWrap: {
+        width: '60%',
+        height: '60%',
+        ellipsis: true
+      }
+    }
+  };
+
+  const weakRelationshipMarkup = [
+    { tagName: 'polygon', selector: 'body' },  // Outer diamond
+    { tagName: 'path', selector: 'path' }, // Inner diamond
+    { tagName: 'text', selector: 'label' }
+  ];
+
+  const weakRelationshipAttrs = {
+    body: {
+      refPoints: '50,5 95,30 50,55 5,30',  // Outer diamond points
+      fill: '#FFFFFF',
+      strokeWidth: 2,
+      stroke: '#000000'
+    },
+    path: {
+      d: `M${elementWidth / 2},5 L${elementWidth - 10},${elementHeight / 2} L${elementWidth / 2},${elementHeight - 5} L10,${elementHeight / 2} Z`,  // Path representing a diamond shape
+      fill: 'none',
+      stroke: '#000000',
+      strokeWidth: 2
+    },
+    label: {
+      text: 'Weak Relationship',
       refX: '50%',
       refY: '50%',
       textAnchor: 'middle',
@@ -1100,8 +1204,6 @@ export default function Home() {
     var subType = attributes?.elementSubType
     var text = attributes?.label?.text
 
-    //var connectedElements = graphRef.current?.getNeighbors(element);
-
     function changeSubType(val: string) {
       element.prop('attrs/elementSubType', val)
       switch (val) {
@@ -1160,7 +1262,7 @@ export default function Home() {
           <Typography variant="h4">Attributes:</Typography>
           <Button fullWidth variant='contained' onClick={() => { addConnectedElementBelow(element, `Attribute ${connectedElements.length}`) }}>Add Attribute</Button>
           <Stack sx={{ width: 1 }} alignItems="center">
-            {connectedElements?.map((attr: dia.Element, idx: number) =>
+            {connectedElements?.filter(e => e.attr().elementType == "attribute").map((attr: dia.Element, idx: number) =>
               <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
                 <Stack direction="row" spacing={1} sx={{ width: 1, py: 2 }} alignItems="center">
 
@@ -1178,10 +1280,145 @@ export default function Home() {
     )
   }
 
-  function getRelationshipConfigUI(_: dia.Element) {
+  function getLinkBetweenById(sourceId: string, targetId: string) {
+    return graphRef.current?.getLinks().filter(link => {
+      const source = link.get('source');
+      const target = link.get('target');
+
+      return (
+        (source.id === sourceId && target.id === targetId) ||
+        (source.id === targetId && target.id === sourceId)  // optional, for both directions
+      );
+    })[0];
+  }
+
+  function getRelationshipConfigUI(element: dia.Element) {
+
+    var attributes = element.attr()
+
+    var color = attributes?.body?.fill
+    var subType = attributes?.elementSubType
+    var text = attributes?.label?.text
+
+    function changeSubType(val: string) {
+      element.prop('attrs/elementSubType', val)
+      switch (val) {
+        case 'weak': {
+          morphShape(element, weakRelationshipMarkup, weakRelationshipAttrs)
+          break
+        }
+        case 'regular': {
+          morphShape(element, diamondMarkup, diamondAttrs)
+          break
+        }
+      }
+    }
+
+    function changeLink(e: dia.Link, val: string) {
+      switch (val) {
+        case 'optional': {
+          e.prop("attrs", JSON.parse(JSON.stringify(optionalSingleLine.attr())))
+          break
+        }
+        case 'partial': {
+          e.prop("attrs", JSON.parse(JSON.stringify(singleLine.attr())))
+          break
+        }
+        case 'total': {
+          e.prop("attrs", JSON.parse(JSON.stringify(doubleLine.attr())))
+          break
+        }
+      }
+    }
+
+    function changeLinkLabel(e: dia.Link, label: string) {
+      e.labels([{
+        ...e.labels()[0],
+        attrs: {
+          text: {
+            text: label
+          }
+        }
+      }]);
+    }
 
     return getConfigUILayout("Relationship",
-      <Typography>Relationship: </Typography>
+      <>
+        <Stack sx={{ width: 1 }} spacing={1}>
+          <Typography variant="h4">Settings:</Typography>
+          <TextField id="outlined-basic" label="Name" defaultValue={text} variant="outlined" onChange={(e) => changeName(element, e.target.value)} />
+          <Stack direction="row" spacing={1} sx={{ width: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel id="type">Type</InputLabel>
+              <Select
+                labelId="type"
+                id="type"
+                label="Type"
+                defaultValue={subType}
+                onChange={(e) => changeSubType(e.target.value)}
+              >
+                <MUI.MenuItem value={'regular'}>Regular</MUI.MenuItem>
+                <MUI.MenuItem value={'weak'}>Weak</MUI.MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel id="color">Color</InputLabel>
+              <Select
+                labelId="color"
+                id="color"
+                label="Color"
+                defaultValue={color}
+                onChange={(e) => changeCellColor(element, e.target.value)}
+              >
+                {colors.map((color) =>
+                  <MUI.MenuItem value={color.value}>{color.name}</MUI.MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          </Stack>
+        </Stack>
+        <Stack sx={{ width: 1 }} spacing={1}>
+          <Stack sx={{ width: 1 }} alignItems="center">
+            {connectedElements?.map((attr: dia.Element, idx: number) => {
+              var link = getLinkBetweenById(element.id as string, attr.id as string)
+              var linkLabelText = ''
+              if (!link?.hasLabels()) {
+                link?.labels([{
+                  attrs: {
+                    text: {
+                      text: '',
+                    },
+                  }
+                }]);
+              } else {
+                linkLabelText = link.labels()?.[0]?.attrs?.text?.text as string
+              }
+              return (link &&
+                <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
+                  <Typography variant="h5">{String(attr.attr().label?.text).substring(0, 14) + (String(attr.attr().label?.text).length > 14 ? '...' : '')} Settings:</Typography>
+                  <Stack direction="row" spacing={1} sx={{ width: 1 }} alignItems="center">
+                    <FormControl fullWidth>
+                      <InputLabel id="type">Type</InputLabel>
+                      <Select
+                        labelId="type"
+                        id="type"
+                        label="Type"
+                        defaultValue={link.attr()?.custom?.type}
+                        onChange={(e) => changeLink(link as dia.Link, e.target.value)}
+                      >
+                        <MUI.MenuItem value={'optional'}>Optional</MUI.MenuItem>
+                        <MUI.MenuItem value={'partial'}>Partial</MUI.MenuItem>
+                        <MUI.MenuItem value={'total'}>Total</MUI.MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField sx={{ width: 1 }} id="outlined-basic" label="Cardinality" variant="outlined" defaultValue={linkLabelText} onChange={(e) => changeLinkLabel(link as dia.Link, e.target.value)} />
+                  </Stack>
+                </li>
+              )
+            })}
+          </Stack>
+        </Stack>
+      </>
     )
   }
 
