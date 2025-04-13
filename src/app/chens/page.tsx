@@ -1395,7 +1395,7 @@ export default function Home() {
               }
               return (link &&
                 <li key={idx} style={{ listStyleType: "none", margin: 0, padding: 0, width: '100%' }}>
-                  <Typography variant="h5">{String(attr.attr().label?.text).substring(0, 14) + (String(attr.attr().label?.text).length > 14 ? '...' : '')} Settings:</Typography>
+                  <Typography sx={{pb: 1}} variant="h5">{String(attr.attr().label?.text).substring(0, 14) + (String(attr.attr().label?.text).length > 14 ? '...' : '')} Settings:</Typography>
                   <Stack direction="row" spacing={1} sx={{ width: 1 }} alignItems="center">
                     <FormControl fullWidth>
                       <InputLabel id="type">Type</InputLabel>
