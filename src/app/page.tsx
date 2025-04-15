@@ -1,8 +1,38 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {Paper, Grid, Typography, Button, Box, Collapse, Container} from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useRouter } from 'next/navigation';
+
+import floatIcon from './image.png'; // Use the correct path to your uploaded image
+
+
+const getRandom = (min: number, max: number) => Math.random() * (max - min) + min;
+
+const FloatingImage = ({ src }: { src: string }) => {
+    const [style, setStyle] = useState({});
+
+    useEffect(() => {
+        const size = getRandom(40, 100); // px
+        const left = getRandom(0, 100); // vw
+        const duration = getRandom(8, 20); // seconds
+        const delay = getRandom(0, 5); // seconds
+
+        setStyle({
+            position: 'absolute',
+            bottom: -size,
+            left: `${left}vw`,
+            width: size,
+            height: 'auto',
+            animation: `floatUp ${duration}s linear ${delay}s infinite`,
+            zIndex: -1,
+            opacity: 0.2,
+        });
+    }, []);
+
+    return <Box component="img" src={src} alt="" sx={style} />;
+};
+
 
 const DiagramBox = ({
                         title,
@@ -67,37 +97,46 @@ export default function WelcomePage() {
     const handleEnterClick = () => router.push('/crows');
 
     return (
-        <Box sx={{ width: 1, height: 1, overflow: 'auto' }}>
+        <Box sx={{ width: 1, height: 1, overflow: 'auto', position: 'relative' }}>
+            {/* Floating background images */}
+            {[...Array(1)].map((_, i) => (
+                <FloatingImage key={0} src= "./image.png" />
+            ))}
+            <Box sx={{ mt: 4 }}>
+            <img src="/image.png" alt="Test" style={{ width: 100, height: 'auto' }} />
+            </Box>
             <Container>
-                <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ minHeight: '50vh', mt: 1 }}>
-                    <Grid item xs={5}>
-                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', height: '100%' }}>
+                <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ mt: 4 }}>
+                    <Grid item xs={6}>
+                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center' }}>
                             <Typography variant="h4" gutterBottom>Welcome to</Typography>
                             <Typography variant="h3" fontWeight="bold">Connections</Typography>
                             <Typography variant="h3" fontWeight="bold">&</Typography>
                             <Typography variant="h3" fontWeight="bold">Directions</Typography>
                         </Paper>
                     </Grid>
-                    <Grid item xs={5}>
-                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', height: '100%' }}>
+                    <Grid item xs={6}>
+                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center' }}>
                             <Typography>
                                 Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear.
                             </Typography>
+                            <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleEnterClick}>
+                                Enter
+                            </Button>
                         </Paper>
                     </Grid>
                 </Grid>
 
-                {/* Chen and Crow Interactive Cards */}
-                <Box sx={{ marginTop: 1 }}>
+                <Box sx={{ mt: 4 }}>
                     <Grid container spacing={4} justifyContent="center">
-                        <Grid item xs={5}>
+                        <Grid item xs={6}>
                             <DiagramBox
                                 title="Chen's Notation"
                                 description="Chen’s notation uses entities, attributes, and relationships to model data. It’s highly readable and often used in academic settings."
                                 route="/chens"
                             />
                         </Grid>
-                        <Grid item xs={5}>
+                        <Grid item xs={6}>
                             <DiagramBox
                                 title="Crow's Foot Notation"
                                 description="Crow’s Foot notation is popular for relational database design and uses symbols to denote cardinality and relationship types."
