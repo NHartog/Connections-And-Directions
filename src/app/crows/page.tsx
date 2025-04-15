@@ -694,6 +694,59 @@ export default function CrowsNotation() {
     }, [attributes, selectedEntity, paper]);
 
 
+    const handleExportSVG = () => {
+        const svgRoot = paper.svg; // Full SVG DOM
+        console.log(svgRoot);
+        if (!svgRoot) {
+            console.error('SVG root not found');
+            return;
+        }
+
+        // Grab the <g class="joint-cells-layer joint-viewport"> element
+        const gLayer = svgRoot.querySelector('g.joint-cells-layer.joint-viewport');
+        if (!gLayer) {
+            console.error('Viewport layer not found');
+            return;
+        }
+
+        console.log(gLayer);
+
+        // Clone the relevant <g> tag
+        const gClone = gLayer.cloneNode(true) as SVGGElement;
+
+        gClone.querySelectorAll('[fill="#f36"], [fill="#ff4060"], .selection-box, .highlighted-element')
+            .forEach(el => el.remove());
+
+        // Optional: get bounding box to fit viewBox to content
+        const bbox = gLayer.getBBox();
+
+        // Create a new standalone SVG element
+        const standaloneSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        standaloneSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        standaloneSvg.setAttribute('width', `${bbox.width}`);
+        standaloneSvg.setAttribute('height', `${bbox.height}`);
+        standaloneSvg.setAttribute('viewBox', `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`);
+        const defs = svgRoot.querySelector('defs');
+        if (defs) {
+            const defsClone = defs.cloneNode(true);
+            standaloneSvg.appendChild(defsClone);
+        }
+        standaloneSvg.appendChild(gClone);
+
+        // Serialize and download
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(standaloneSvg);
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diagram-layer.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     const addEntityAt = (x: number, y: number) => {
         if (!graph || !paper) return;
@@ -937,6 +990,11 @@ export default function CrowsNotation() {
                             icon={<FileUploadIcon />}
                             tooltipTitle="Import"
                             onClick={triggerFileDialog}
+                        />
+                        <SpeedDialAction
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" height="24" width="24"><text x="3" y="17" fontSize="14">SVG</text></svg>}
+                            tooltipTitle="Export as SVG"
+                            onClick={handleExportSVG}
                         />
                     </SpeedDial>
                 </Box>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppBar, Toolbar, Typography, Button, Box, Container, Stack } from '@mui/material';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
+import './globals.css'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
     return (

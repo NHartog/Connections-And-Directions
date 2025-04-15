@@ -4,7 +4,15 @@ import {Paper, Grid, Typography, Button, Box, Collapse, Container} from '@mui/ma
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useRouter } from 'next/navigation';
 
-import floatIcon from './image.png'; // Use the correct path to your uploaded image
+const floatImages = [
+    '/diagram_imgs/img1.png',
+    '/diagram_imgs/img2.png',
+    '/diagram_imgs/img3.png',
+    '/diagram_imgs/img4.png',
+    '/diagram_imgs/img5.png',
+    '/diagram_imgs/img6.png',
+    '/diagram_imgs/img7.png'
+];
 
 
 const getRandom = (min: number, max: number) => Math.random() * (max - min) + min;
@@ -13,24 +21,24 @@ const FloatingImage = ({ src }: { src: string }) => {
     const [style, setStyle] = useState({});
 
     useEffect(() => {
-        const size = getRandom(40, 100); // px
+        const size = getRandom(40, 100); // size in px
         const left = getRandom(0, 100); // vw
         const duration = getRandom(8, 20); // seconds
-        const delay = getRandom(0, 5); // seconds
+        const delay = getRandom(0, 3); // seconds
 
         setStyle({
             position: 'absolute',
-            bottom: -size,
+            bottom: `-${size}px`,
             left: `${left}vw`,
-            width: size,
-            height: 'auto',
+            width: `${size}px`,
             animation: `floatUp ${duration}s linear ${delay}s infinite`,
             zIndex: -1,
-            opacity: 0.2,
+            opacity: 0.8,
+            pointerEvents: 'none',
         });
     }, []);
 
-    return <Box component="img" src={src} alt="" sx={style} />;
+    return <Box component="img" src={src} alt="floating" sx={style} />;
 };
 
 
@@ -97,14 +105,12 @@ export default function WelcomePage() {
     const handleEnterClick = () => router.push('/crows');
 
     return (
-        <Box sx={{ width: 1, height: 1, overflow: 'auto', position: 'relative' }}>
+        <Box sx={{ width: 1, height: 1, overflow: 'hidden', position: 'relative' }}>
             {/* Floating background images */}
-            {[...Array(1)].map((_, i) => (
-                <FloatingImage key={0} src= "./image.png" />
-            ))}
-            <Box sx={{ mt: 4 }}>
-            <img src="/image.png" alt="Test" style={{ width: 100, height: 'auto' }} />
-            </Box>
+            {[...Array(50)].map((_, i) => {
+                const src = floatImages[Math.floor(Math.random() * floatImages.length)];
+                return <FloatingImage key={i} src={src} />;
+            })}
             <Container>
                 <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ mt: 4 }}>
                     <Grid item xs={6}>
