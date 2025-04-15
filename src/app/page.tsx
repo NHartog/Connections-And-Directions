@@ -1,81 +1,112 @@
-"use client"
-import React from 'react';
-import { Paper, Grid, Typography, Button, Box, Container } from '@mui/material';
+'use client'
+import React, { useState } from 'react';
+import {Paper, Grid, Typography, Button, Box, Collapse, Container} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useRouter } from 'next/navigation';
 
-const WelcomePage = () => {
+const DiagramBox = ({
+                        title,
+                        description,
+                        route,
+                    }: {
+    title: string;
+    description: string;
+    route: string;
+}) => {
+    const [hovered, setHovered] = useState(false);
     const router = useRouter();
 
-    const handleEnterClick = () => {
-        router.push('/crows');
-    };
+    return (
+        <Paper
+            elevation={3}
+            sx={{
+                width: '100%',
+                maxWidth: 500,
+                overflow: 'hidden',
+                textAlign: 'center',
+                padding: 1,
+                cursor: 'pointer',
+                transition: 'box-shadow 0.3s ease',
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+        >
+            {/* Always visible */}
+            <Typography variant="h6" fontWeight="bold">
+                {title}
+            </Typography>
+            <ExpandMoreIcon
+                sx={{
+                    transform: hovered ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease',
+                }}
+            />
+
+            {/* Smooth expansion via Collapse */}
+            <Collapse in={hovered} timeout={300}>
+                <Box sx={{ mt: 1 }}>
+                    <Typography sx={{ mb: 1 }}>{description}</Typography>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => router.push(route)}
+                        sx={{ mb: 0 }}
+                    >
+                        Create {title} Diagram
+                    </Button>
+                </Box>
+            </Collapse>
+        </Paper>
+    );
+};
+
+
+export default function WelcomePage() {
+    const router = useRouter();
+
+    const handleEnterClick = () => router.push('/crows');
 
     return (
         <Box sx={{ width: 1, height: 1, overflow: 'auto' }}>
             <Container>
-                <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ minHeight: '80vh' }}>
-                    <Grid item xs={6}>
-                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', minWidth: 250, boxShadow: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <Typography variant="h4" gutterBottom>
-                                Welcome to
-                            </Typography>
-                            <Typography variant="h3" fontWeight="bold">
-                                Connections
-                            </Typography>
-                            <Typography variant="h3" fontWeight="bold">
-                                &
-                            </Typography>
-                            <Typography variant="h3" fontWeight="bold">
-                                Directions
-                            </Typography>
+                <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ minHeight: '50vh', mt: 1 }}>
+                    <Grid item xs={5}>
+                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', height: '100%' }}>
+                            <Typography variant="h4" gutterBottom>Welcome to</Typography>
+                            <Typography variant="h3" fontWeight="bold">Connections</Typography>
+                            <Typography variant="h3" fontWeight="bold">&</Typography>
+                            <Typography variant="h3" fontWeight="bold">Directions</Typography>
                         </Paper>
                     </Grid>
-                    <Grid item xs={6}>
-                        <Paper elevation={3} sx={{ padding: 4, maxWidth: 400, boxShadow: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <Grid item xs={5}>
+                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', height: '100%' }}>
                             <Typography>
-                                Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear. Users can store their diagrams online or download them locally for use in classes or shared online. Feel free to reach out and contact us!
+                                Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear.
                             </Typography>
-                            <Button variant="contained" color="primary" sx={{ marginTop: 2, backgroundColor: '#1976d2' }} onClick={handleEnterClick}>
-                                Enter
-                            </Button>
                         </Paper>
                     </Grid>
                 </Grid>
 
-                {/* New Section Below */}
-                <Box sx={{ marginTop: 6 }}>
+                {/* Chen and Crow Interactive Cards */}
+                <Box sx={{ marginTop: 1 }}>
                     <Grid container spacing={4} justifyContent="center">
                         <Grid item xs={5}>
-                            <Paper elevation={3} sx={{ padding: 4 }}>
-                                <Typography variant="h5" fontWeight="bold" gutterBottom>
-                                    Chen's Notation
-                                </Typography>
-                                <Typography>
-                                    Chens Notation llll  llllll lllll lllll llllll lllllll lllllllll ll llll llll lllll llllll lllll lllll ll l lll lll l llll l l l llllllll lll l lllll llll llll ll ll lllll.
-                                </Typography>
-                                <Typography sx={{ marginTop: 2 }}>
-                                    Link to learn more.
-                                </Typography>
-                            </Paper>
+                            <DiagramBox
+                                title="Chen's Notation"
+                                description="Chen’s notation uses entities, attributes, and relationships to model data. It’s highly readable and often used in academic settings."
+                                route="/chens"
+                            />
                         </Grid>
                         <Grid item xs={5}>
-                            <Paper elevation={3} sx={{ padding: 4 }}>
-                                <Typography variant="h5" fontWeight="bold" gutterBottom>
-                                    Crow's Foot Notation
-                                </Typography>
-                                <Typography>
-                                    Crow's Foot Notation llll  llllll lllll lllll llllll lllllll lllllllll ll llll llll lllll llllll lllll lllll ll l lll lll l llll l l l llllllll lll l lllll llll llll ll ll lllll.
-                                </Typography>
-                                <Typography sx={{ marginTop: 2 }}>
-                                    Link to learn more.
-                                </Typography>
-                            </Paper>
+                            <DiagramBox
+                                title="Crow's Foot Notation"
+                                description="Crow’s Foot notation is popular for relational database design and uses symbols to denote cardinality and relationship types."
+                                route="/crows"
+                            />
                         </Grid>
                     </Grid>
                 </Box>
             </Container>
         </Box>
     );
-};
-
-export default WelcomePage;
+}

@@ -14,11 +14,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                                     <Typography variant="h6" sx={{ color: '#003366' }}>
                                         Connections & Directions
                                     </Typography>
-                                    <Button sx={{
-                                        color: '#fff',
-                                        backgroundColor: '#003366',
-                                        '&:hover': { backgroundColor: '#001f4d' }
-                                    }}>LOGIN</Button>
+                                    {/*<Button sx={{*/}
+                                    {/*    color: '#fff',*/}
+                                    {/*    backgroundColor: '#003366',*/}
+                                    {/*    '&:hover': { backgroundColor: '#001f4d' }*/}
+                                    {/*}}>LOGIN</Button>*/}
                                 </Stack>
                             </Toolbar>
                         </AppBar>
