@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect } from 'react';
-import {Paper, Grid, Typography, Button, Box, Collapse, Container} from '@mui/material';
+import { Paper, Typography, Button, Box, Collapse, Container, Stack } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useRouter } from 'next/navigation';
 
@@ -26,9 +27,9 @@ const floatImages = [
 const getRandom = (min: number, max: number) => Math.random() * (max - min) + min;
 
 const FloatingImage = ({
-                           src,
-                           onReady
-                       }: {
+    src,
+    onReady
+}: {
     src: string;
     onReady?: () => void;
 }) => {
@@ -61,10 +62,10 @@ const FloatingImage = ({
 
 
 const DiagramBox = ({
-                        title,
-                        description,
-                        route,
-                    }: {
+    title,
+    description,
+    route,
+}: {
     title: string;
     description: string;
     route: string;
@@ -76,8 +77,7 @@ const DiagramBox = ({
         <Paper
             elevation={3}
             sx={{
-                width: '100%',
-                maxWidth: 500,
+                width: 1,
                 overflow: 'hidden',
                 textAlign: 'center',
                 padding: 1,
@@ -123,7 +123,7 @@ export default function WelcomePage() {
     useEffect(() => {
         const interval = setInterval(() => {
             setActiveImages(prev => {
-                if (prev.length >= 1000) { // adjust this cap as needed
+                if (prev.length >= 0) { // adjust this cap as needed
                     clearInterval(interval);
                     return prev;
                 }
@@ -143,38 +143,37 @@ export default function WelcomePage() {
             {activeImages.map((src, i) => (
                 <FloatingImage key={i} src={src} />
             ))}
-            <Container>
-                <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ mt: 4 }}>
-                    <Grid item xs={6}>
-                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center' }}>
-                            <Typography variant="h4" gutterBottom>Welcome to</Typography>
-                            <Typography variant="h3" fontWeight="bold">Connections</Typography>
-                            <Typography variant="h3" fontWeight="bold">&</Typography>
-                            <Typography variant="h3" fontWeight="bold">Directions</Typography>
-                        </Paper>
-                    </Grid>
-                    <Grid item xs={6}>
-                        <Paper elevation={3} sx={{ padding: 4, textAlign: 'center' }}>
-                            <Typography>
-                                Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear.
-                            </Typography>
-                            <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleEnterClick}>
-                                Enter
-                            </Button>
-                        </Paper>
-                    </Grid>
-                </Grid>
-
-                <Box sx={{ mt: 4 }}>
-                    <Grid container spacing={4} justifyContent="center">
-                        <Grid item xs={6}>
+            <Container sx={{ height: 1 }}>
+                <Stack direction='column' sx={{ width: 1, height: 1 }} justifyContent="center">
+                    <Grid container spacing={4} sx={{ mt: 4 }}>
+                        <Grid size={6}>
+                            <Paper elevation={3} sx={{ padding: 4, textAlign: 'center' }}>
+                                <Typography variant="h4" gutterBottom>Welcome to</Typography>
+                                <Typography variant="h3" fontWeight="bold">Connections</Typography>
+                                <Typography variant="h3" fontWeight="bold">&</Typography>
+                                <Typography variant="h3" fontWeight="bold">Directions</Typography>
+                            </Paper>
+                        </Grid>
+                        <Grid size={6}>
+                            <Paper elevation={3} sx={{ padding: 4, textAlign: 'center', height: 1 }}>
+                                <Stack direction='column' sx={{ width: 1, height: 1 }} justifyContent="space-between">
+                                    <Typography>
+                                        Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear.
+                                    </Typography>
+                                    <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleEnterClick}>
+                                        Enter
+                                    </Button>
+                                </Stack>
+                            </Paper>
+                        </Grid>
+                        <Grid size={6} minHeight={200}>
                             <DiagramBox
                                 title="Chen's Notation"
                                 description="Chen’s notation uses entities, attributes, and relationships to model data. It’s highly readable and often used in academic settings."
                                 route="/chens"
                             />
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={6} minHeight={200}>
                             <DiagramBox
                                 title="Crow's Foot Notation"
                                 description="Crow’s Foot notation is popular for relational database design and uses symbols to denote cardinality and relationship types."
@@ -182,7 +181,7 @@ export default function WelcomePage() {
                             />
                         </Grid>
                     </Grid>
-                </Box>
+                </Stack>
             </Container>
         </Box>
     );
