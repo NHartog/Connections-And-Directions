@@ -5,26 +5,40 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useRouter } from 'next/navigation';
 
 const floatImages = [
-    '/diagram_imgs/img1.png',
-    '/diagram_imgs/img2.png',
-    '/diagram_imgs/img3.png',
-    '/diagram_imgs/img4.png',
-    '/diagram_imgs/img5.png',
-    '/diagram_imgs/img6.png',
-    '/diagram_imgs/img7.png'
+    '/diagram_imgs/img_1.png',
+    '/diagram_imgs/img_2.png',
+    '/diagram_imgs/img_3.png',
+    '/diagram_imgs/img_4.png',
+    '/diagram_imgs/img_5.png',
+    '/diagram_imgs/img_6.png',
+    '/diagram_imgs/img_7.png',
+    '/diagram_imgs/img_8.png',
+    '/diagram_imgs/img_9.png',
+    '/diagram_imgs/img_10.png',
+    '/diagram_imgs/img_11.png',
+    '/diagram_imgs/img_12.png',
+    '/diagram_imgs/img_13.png',
+    '/diagram_imgs/img_14.png',
+    '/diagram_imgs/img_15.png',
 ];
 
 
 const getRandom = (min: number, max: number) => Math.random() * (max - min) + min;
 
-const FloatingImage = ({ src }: { src: string }) => {
-    const [style, setStyle] = useState({});
+const FloatingImage = ({
+                           src,
+                           onReady
+                       }: {
+    src: string;
+    onReady?: () => void;
+}) => {
+    const [style, setStyle] = useState<React.CSSProperties | null>(null);
 
     useEffect(() => {
-        const size = getRandom(40, 100); // size in px
-        const left = getRandom(0, 100); // vw
-        const duration = getRandom(8, 20); // seconds
-        const delay = getRandom(0, 3); // seconds
+        const size = getRandom(40, 100);
+        const left = getRandom(0, 100);
+        const duration = getRandom(8, 20);
+        const delay = getRandom(0, 3);
 
         setStyle({
             position: 'absolute',
@@ -36,8 +50,12 @@ const FloatingImage = ({ src }: { src: string }) => {
             opacity: 0.8,
             pointerEvents: 'none',
         });
-    }, []);
 
+        // Mark this image as "ready" once styles are set
+        onReady?.();
+    }, [onReady]);
+
+    if (!style) return null;
     return <Box component="img" src={src} alt="floating" sx={style} />;
 };
 
@@ -101,16 +119,30 @@ const DiagramBox = ({
 
 export default function WelcomePage() {
     const router = useRouter();
+    const [activeImages, setActiveImages] = useState<string[]>([]);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setActiveImages(prev => {
+                if (prev.length >= 1000) { // adjust this cap as needed
+                    clearInterval(interval);
+                    return prev;
+                }
+                const src = floatImages[Math.floor(Math.random() * floatImages.length)];
+                return [...prev, src];
+            });
+        }, 1); // images appear ~ every 150ms
+
+        return () => clearInterval(interval);
+    }, []);
 
     const handleEnterClick = () => router.push('/crows');
 
     return (
         <Box sx={{ width: 1, height: 1, overflow: 'hidden', position: 'relative' }}>
             {/* Floating background images */}
-            {[...Array(50)].map((_, i) => {
-                const src = floatImages[Math.floor(Math.random() * floatImages.length)];
-                return <FloatingImage key={i} src={src} />;
-            })}
+            {activeImages.map((src, i) => (
+                <FloatingImage key={i} src={src} />
+            ))}
             <Container>
                 <Grid container spacing={4} justifyContent="center" alignItems="center" sx={{ mt: 4 }}>
                     <Grid item xs={6}>

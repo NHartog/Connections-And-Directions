@@ -514,8 +514,8 @@ export default function Home() {
   const addElement = (name: ChenOptions, shape: dia.Element, useWheel: boolean, xPos?: number, yPos?: number, label?: string, elementNum: number = 0) => {
     if (graphRef.current && paper) {
       //shape.addTo(graph);
-      var x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0)
-      var y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5 // To note, the 36.5 is the height of the header
+      let x = (useWheel ? positionSelectionWheel.x : (boxWrapperRef.current?.offsetWidth || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionX || 0);
+      let y = (useWheel ? positionSelectionWheel.y : (boxWrapperRef.current?.offsetHeight || 0) / 2) - (transformWrapperRef.current?.instance.transformState.positionY || 0) - elementHeight / 2 - 36.5; // To note, the 36.5 is the height of the header
 
       if (xPos) {
         x = xPos + elementWidth / 2
@@ -631,7 +631,7 @@ export default function Home() {
   };
 
   const handleExportSVG = () => {
-    const svgRoot = paper.svg; // Full SVG DOM
+    const svgRoot = paper?.svg; // Full SVG DOM
     console.log(svgRoot);
     if (!svgRoot) {
       console.error('SVG root not found');
@@ -639,7 +639,7 @@ export default function Home() {
     }
 
     // Grab the <g class="joint-cells-layer joint-viewport"> element
-    const gLayer = svgRoot.querySelector('g.joint-cells-layer.joint-viewport');
+    const gLayer = svgRoot.querySelector('g.joint-cells-layer.joint-viewport') as SVGGraphicsElement;
     if (!gLayer) {
       console.error('Viewport layer not found');
       return;
