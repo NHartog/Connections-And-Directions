@@ -6,8 +6,6 @@ import {
     IconButton,
     Typography,
     Paper,
-    ListItem,
-    List,
     Select,
     Stack,
     MenuItem, Checkbox, Tooltip, Popover, FormControl, InputLabel
@@ -53,10 +51,10 @@ class SelectionManager {
     private initEvents() {
         this.paper.on('blank:pointerdown', (evt, x, y) => this.startSelectionBox(evt, x, y));
         this.paper.on('blank:pointerup', () => this.endSelectionBox());
-        this.paper.on('blank:pointermove', (evt, x, y) => this.updateSelectionBox(x, y));
+        this.paper.on('blank:pointermove', (_, x, y) => this.updateSelectionBox(x, y));
 
         this.paper.on('element:pointerdown', (elementView, evt) => this.startDrag(elementView, evt));
-        this.paper.on('element:pointermove', (elementView, evt, x, y) => this.dragSelected(x, y));
+        this.paper.on('element:pointermove', (_, __, x, y) => this.dragSelected(x, y));
         this.paper.on('element:pointerup', () => this.endDrag());
     }
 
@@ -100,7 +98,7 @@ class SelectionManager {
 
     private startDrag(elementView: dia.ElementView, evt: dia.Event) {
         const model = elementView.model;
-        this.anchorElementId = model.id;
+        this.anchorElementId = model.id as string;
 
         if (!this.selected.has(model)) {
             this.clearSelection();
@@ -110,17 +108,19 @@ class SelectionManager {
         // Track initial positions of all selected elements
         this.initialPositions.clear();
         this.selected.forEach((el) => {
-            this.initialPositions.set(el.id, el.position());
+            this.initialPositions.set(el.id as string, el.position());
         });
 
         // Track the offset between the mouse click and the element's position
         const pointerEvent = evt as joint.dia.Event;
-        const clickCoords = this.paper.clientToLocalPoint(pointerEvent.clientX, pointerEvent.clientY);
-        const elementPos = model.position();
-        this.dragOffset = {
-            x: clickCoords.x - elementPos.x,
-            y: clickCoords.y - elementPos.y
-        };
+        if (pointerEvent.clientX && pointerEvent.clientY) {
+            const clickCoords = this.paper.clientToLocalPoint(pointerEvent.clientX, pointerEvent.clientY);
+            const elementPos = model.position();
+            this.dragOffset = {
+                x: clickCoords.x - elementPos.x,
+                y: clickCoords.y - elementPos.y
+            };
+        }
     }
 
     private dragSelected(mouseX: number, mouseY: number) {
@@ -134,7 +134,7 @@ class SelectionManager {
         const lead = this.anchorElementId
             ? this.graph.getCell(this.anchorElementId) as dia.Element
             : [...this.selected][0];
-        const start = this.initialPositions.get(lead.id);
+        const start = this.initialPositions.get(lead.id as string);
         if (!start) return;
 
         const dx = adjustedX - start.x;
@@ -142,7 +142,7 @@ class SelectionManager {
 
         // Apply to all selected elements
         this.selected.forEach(el => {
-            const original = this.initialPositions.get(el.id);
+            const original = this.initialPositions.get(el.id as string);
             if (original) {
                 el.position(original.x + dx, original.y + dy);
             }
@@ -193,22 +193,18 @@ export default function CrowsNotation() {
     const [panningEnabled, setPanningEnabled] = useState<boolean>(true)
     const transformWrapperRef = useRef<ReactZoomPanPinchRef>(null)
     const boxWrapperRef = useRef<HTMLElement>(null)
-    const selectedCells = useRef<dia.Cell[]>([])
     const width = 8000
     const height = 8000
     const elementWidth = 200
     const elementHeight = 100
 
 
-    const [open, setOpen] = useState(false);
     const [selectedEntity, setSelectedEntity] = useState<dia.Element | null>(null);
     const [entityName, setEntityName] = useState("");
     const [attributes, setAttributes] = useState<{ name: string; isKey: boolean }[]>([]);
-    const [allEntities, setAllEntities] = useState<dia.Element[]>([]);
     const [connectedEntities, setConnectedEntities] = useState<dia.Element[]>([]);
     const [selectionManager, setSelectionManager] = useState<SelectionManager | null>(null);
 
-    type LinkEnd = 'source' | 'target';
     type LinkTypeMap = { [linkId: string]: { source: string; target: string } };
     const [linkTypes, setLinkTypes] = useState<LinkTypeMap>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,7 +365,7 @@ export default function CrowsNotation() {
                 name: 'boundary',
                 args: { sticky: true, perpendicular: true }
             },
-            validateConnection: (srcView, srcMagnet, tgtView, tgtMagnet, end) => {
+            validateConnection: (srcView, ___, tgtView, __, _) => {
                 const source = srcView.model;
                 const target = tgtView.model;
                 if (source === target) return false;
@@ -419,7 +415,7 @@ export default function CrowsNotation() {
 
                 setSelectedEntity(element);
                 setEntityName(element.attr('headerText/text') || "");
-                const rawAttrs = element.attr('bodyText/text')?.split('\n') || [];
+                const rawAttrs: string[] = element.attr('bodyText/text')?.split('\n') || [];
                 setAttributes(rawAttrs.map(attr => ({
                     name: attr.replace(/^\*\s*/, ''),
                     isKey: attr.startsWith('* ')
@@ -449,7 +445,7 @@ export default function CrowsNotation() {
             elementView.hideTools();
         });
 
-        paper.on('link:connect', (linkView, evt, elementViewConnected) => {
+        paper.on('link:connect', (linkView, _, __) => {
             const link = linkView.model;
             if (!link.get('target')?.id) {
                 link.remove();
@@ -671,8 +667,8 @@ export default function CrowsNotation() {
     useEffect(() => {
         if (!selectedEntity || !paper) return;
 
-        const view = selectedEntity.findView(paper);
-        const bodyTextEl = view?.findBySelector('bodyText')?.[0] as SVGGraphicsElement | undefined;
+        const view = selectedEntity.findView(paper) as dia.ElementView | undefined;
+        const bodyTextEl = view?.el.querySelector('[selector-name="bodyText"]') as SVGGraphicsElement | null;
 
         if (bodyTextEl) {
             // Force reflow before measuring
@@ -695,7 +691,7 @@ export default function CrowsNotation() {
 
 
     const handleExportSVG = () => {
-        const svgRoot = paper.svg; // Full SVG DOM
+        const svgRoot = paper?.svg; // Full SVG DOM
         console.log(svgRoot);
         if (!svgRoot) {
             console.error('SVG root not found');
@@ -703,7 +699,7 @@ export default function CrowsNotation() {
         }
 
         // Grab the <g class="joint-cells-layer joint-viewport"> element
-        const gLayer = svgRoot.querySelector('g.joint-cells-layer.joint-viewport');
+        const gLayer = svgRoot.querySelector('g.joint-cells-layer.joint-viewport') as SVGGraphicsElement;
         if (!gLayer) {
             console.error('Viewport layer not found');
             return;
@@ -773,7 +769,7 @@ export default function CrowsNotation() {
         entity.attr('bodyText/ref-y', 1);
         entity.attr('bodyText/fontSize', 15);
 
-// ✅ Added for left-aligned multiline support
+        // ✅ Added for left-aligned multiline support
         entity.attr('bodyText/ref-x', 0);               // Start at the left
         entity.attr('bodyText/ref-dx', null);           // ✅ Cancel horizontal offset
         entity.attr('bodyText/ref-x2', null);           // ✅ Cancel mirrored offset
@@ -796,14 +792,6 @@ export default function CrowsNotation() {
         const shapeView = entity.findView(paper);
         shapeView.addTools(toolsView);
         shapeView.hideTools();
-    };
-
-    const handleSave = () => {
-        if (selectedEntity) {
-            selectedEntity.attr('headerText/text', entityName);
-            const attrText = attributes.map(attr => attr.isKey ? `* ${attr.name}` : attr.name).join('\n');
-            selectedEntity.attr('bodyText/text', attrText);
-        }
     };
 
     const handleExport = () => {
@@ -914,16 +902,16 @@ export default function CrowsNotation() {
     }
 
     return (
-        <Stack direction="row" sx={{width: 1, height: 1}}>
+        <Stack direction="row" sx={{ width: 1, height: 1 }}>
             <input
                 type="file"
                 accept="application/json"
                 ref={fileInputRef}
                 onChange={handleImport}
-                style={{display: "none"}}
+                style={{ display: "none" }}
             />
-            <Box sx={{width: 'calc(100% - 350px)', height: '100%'}}>
-                <Box sx={{position: 'fixed', zIndex: 2}}>
+            <Box sx={{ width: 'calc(100% - 350px)', height: '100%' }}>
+                <Box sx={{ position: 'fixed', zIndex: 2 }}>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
                     <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
@@ -931,47 +919,47 @@ export default function CrowsNotation() {
 
 
                 </Box>
-                <Box sx={{width: '100%', height: '100%'}} ref={boxWrapperRef}>
+                <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
                     <TransformWrapper
                         centerOnInit={true}
                         initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
                         initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
-                        doubleClick={{mode: 'toggle'}}
-                        panning={{disabled: !panningEnabled}}
+                        doubleClick={{ mode: 'toggle' }}
+                        panning={{ disabled: !panningEnabled }}
                         ref={transformWrapperRef}
                     >
-                        <TransformComponent wrapperStyle={{width: '100%', height: '100%'}}>
+                        <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
                             <Box id="crows_foot_graph"
-                                 onMouseDown={(e) => {
-                                     const target = e.target as HTMLElement;
+                                onMouseDown={(e) => {
+                                    const target = e.target as HTMLElement;
 
-                                     if (shiftHeld.current && e.button === 0) {
-                                         // SHIFT + Left Click: Add entity at click location
-                                         const rect = boxWrapperRef.current?.getBoundingClientRect();
-                                         const localX = e.clientX - (rect?.left ?? 0);
-                                         const localY = e.clientY - (rect?.top ?? 0);
+                                    if (shiftHeld.current && e.button === 0) {
+                                        // SHIFT + Left Click: Add entity at click location
+                                        const rect = boxWrapperRef.current?.getBoundingClientRect();
+                                        const localX = e.clientX - (rect?.left ?? 0);
+                                        const localY = e.clientY - (rect?.top ?? 0);
 
-                                         const transform = transformWrapperRef.current?.instance.transformState;
-                                         const graphX = (localX - (transform?.positionX ?? 0)) / (transform?.scale ?? 1);
-                                         const graphY = (localY - (transform?.positionY ?? 0)) / (transform?.scale ?? 1);
+                                        const transform = transformWrapperRef.current?.instance.transformState;
+                                        const graphX = (localX - (transform?.positionX ?? 0)) / (transform?.scale ?? 1);
+                                        const graphY = (localY - (transform?.positionY ?? 0)) / (transform?.scale ?? 1);
 
-                                         // Call a function to add entity
-                                         addEntityAt(graphX, graphY);
-                                         return;
-                                     }
+                                        // Call a function to add entity
+                                        addEntityAt(graphX, graphY);
+                                        return;
+                                    }
 
 
-                                     if (target.closest('.joint-element')) {
-                                         setPanningEnabled(false);
-                                     }
-                                     if (target.closest('.joint-link')) {
-                                         setPanningEnabled(false);
-                                     }
-                                     if (target.closest('.joint-tool')) {
-                                         setPanningEnabled(false);
-                                     }
-                                 }}
-                                 onMouseUp={() => setPanningEnabled(true)}
+                                    if (target.closest('.joint-element')) {
+                                        setPanningEnabled(false);
+                                    }
+                                    if (target.closest('.joint-link')) {
+                                        setPanningEnabled(false);
+                                    }
+                                    if (target.closest('.joint-tool')) {
+                                        setPanningEnabled(false);
+                                    }
+                                }}
+                                onMouseUp={() => setPanningEnabled(true)}
                             />
                         </TransformComponent>
                     </TransformWrapper>
@@ -1040,178 +1028,178 @@ export default function CrowsNotation() {
             </Box>
             <Paper elevation={3} sx={{ height: '100%', width: '350px', overflowY: 'auto' }}>
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
-                {selectedEntity ? (
-                    <Stack sx={{ width: 1, pt: 2 }} alignItems="center" spacing={3}>
-                        <Paper elevation={5} sx={{ textAlign: 'center', width: 0.8, p: 2 }}>
-                            <Typography variant="h3">Entity</Typography>
-                        </Paper>
+                    {selectedEntity ? (
+                        <Stack sx={{ width: 1, pt: 2 }} alignItems="center" spacing={3}>
+                            <Paper elevation={5} sx={{ textAlign: 'center', width: 0.8, p: 2 }}>
+                                <Typography variant="h3">Entity</Typography>
+                            </Paper>
 
-                        {/* Settings Section */}
-                        <Box sx={{ width: '90%' }}>
-                            <Typography variant="h4">Settings:</Typography>
-                            <TextField
-                                fullWidth
-                                label="Name"
-                                value={entityName}
-                                onChange={(e) => setEntityName(e.target.value)}
-                                sx={{ mt: 1 }}
-                            />
-                            <FormControl fullWidth sx={{ mt: 2 }}>
-                                <InputLabel id="color">Color</InputLabel>
-                                <Select
-                                    labelId="color"
-                                    id="color"
-                                    label="Color"
-                                    value={selectedEntity?.attr('body/fill') || ''}
-                                    onChange={(e) => {
-                                        selectedEntity?.attr('body/fill', e.target.value);
-                                    }}
-                                >
-                                    {colors.map((color, idx) => (
-                                        <MenuItem key={idx} value={color.value}>
-                                            {color.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-
-                        </Box>
-
-                        {/* Attributes Section */}
-                        <Box sx={{ width: '90%' }}>
-                            <Typography variant="h4">Attributes:</Typography>
-                            <Stack spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                                {attributes.map((attr, index) => (
-                                    <Stack
-                                        key={index}
-                                        direction="row"
-                                        spacing={1}
-                                        sx={{ width: 1 }}
-                                        alignItems="center"
-                                    >
-                                        <Typography variant="h5" sx={{ width: 20 }}>{index + 1}.</Typography>
-                                        <Checkbox
-                                            size="small"
-                                            checked={attr.isKey}
-                                            onChange={(e) => {
-                                                const newAttrs = [...attributes];
-                                                newAttrs[index].isKey = e.target.checked;
-                                                setAttributes(newAttrs);
-                                            }}
-                                        />
-                                        <TextField
-                                            size="small"
-                                            label="Attribute Name"
-                                            value={attr.name}
-                                            onChange={(e) => {
-                                                const newAttrs = [...attributes];
-                                                newAttrs[index].name = e.target.value;
-                                                setAttributes(newAttrs);
-                                            }}
-                                            sx={{ flexGrow: 1 }}
-                                        />
-                                        <IconButton
-                                            onClick={() =>
-                                                setAttributes(attributes.filter((_, i) => i !== index))
-                                            }
-                                            size="small"
-                                            sx={{ color: 'error.main' }}
-                                        >
-                                            <HighlightOffIcon />
-                                        </IconButton>
-                                    </Stack>
-                                ))}
-                                <Button
+                            {/* Settings Section */}
+                            <Box sx={{ width: '90%' }}>
+                                <Typography variant="h4">Settings:</Typography>
+                                <TextField
                                     fullWidth
-                                    variant="contained"
-                                    onClick={() =>
-                                        setAttributes([...attributes, { name: "New Attribute", isKey: false }])
-                                    }
-                                >
-                                    + Add Attribute
-                                </Button>
-                            </Stack>
-                        </Box>
+                                    label="Name"
+                                    value={entityName}
+                                    onChange={(e) => setEntityName(e.target.value)}
+                                    sx={{ mt: 1 }}
+                                />
+                                <FormControl fullWidth sx={{ mt: 2 }}>
+                                    <InputLabel id="color">Color</InputLabel>
+                                    <Select
+                                        labelId="color"
+                                        id="color"
+                                        label="Color"
+                                        value={selectedEntity?.attr('body/fill') || ''}
+                                        onChange={(e) => {
+                                            selectedEntity?.attr('body/fill', e.target.value);
+                                        }}
+                                    >
+                                        {colors.map((color, idx) => (
+                                            <MenuItem key={idx} value={color.value}>
+                                                {color.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
 
-                        {/* Connections Section */}
-                        <Box sx={{ width: '90%' }}>
-                            <Typography variant="h4">Connections:</Typography>
-                            <Stack spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                                {connectedEntities.length === 0 ? (
-                                    <Typography variant="body1">No connections</Typography>
-                                ) : connectedEntities.map((entity, index) => {
-                                    const links = graph?.getConnectedLinks(selectedEntity!) || [];
-                                    const link = links.find(link => {
-                                        const sourceId = link.get('source')?.id;
-                                        const targetId = link.get('target')?.id;
-                                        return (
-                                            (sourceId === selectedEntity!.id && targetId === entity.id) ||
-                                            (sourceId === entity.id && targetId === selectedEntity!.id)
-                                        );
-                                    });
+                            </Box>
 
-                                    if (!link) return null;
-
-                                    const linkId = link.id;
-                                    const isSource = link.get('source')?.id === selectedEntity!.id;
-                                    const side: 'source' | 'target' = isSource ? 'source' : 'target';
-                                    const currentType = linkTypes[linkId]?.[side] || 'Zero or One';
-
-                                    return (
-                                        <Stack key={index} direction="row" spacing={1} sx={{ width: 1 }} alignItems="center">
-                                            <FormControl fullWidth>
-                                                <Select
-                                                    value={currentType}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-
-                                                        setLinkTypes(prev => ({
-                                                            ...prev,
-                                                            [link.id]: {
-                                                                ...prev[link.id],
-                                                                [side]: value
-                                                            }
-                                                        }));
-                                                    }}
-                                                    size="small"
-                                                >
-                                                    {Object.keys(crowMarkers).map((opt, idx) => (
-                                                        <MenuItem key={idx} value={opt}>{opt}</MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                            <Typography sx={{ flexGrow: 1 }}>
-                                                {entity.attr('headerText/text') || 'Unnamed Entity'}
-                                            </Typography>
-                                            <IconButton onClick={() => {
-                                                const linkToRemove = graph?.getConnectedLinks(selectedEntity!)
-                                                    .find(link => {
-                                                        const sourceId = link.get('source')?.id;
-                                                        const targetId = link.get('target')?.id;
-                                                        return (
-                                                            (sourceId === selectedEntity!.id && targetId === entity.id) ||
-                                                            (sourceId === entity.id && targetId === selectedEntity!.id)
-                                                        );
-                                                    });
-                                                if (linkToRemove) {
-                                                    linkToRemove.remove();
-                                                    refreshConnectedEntities();
-                                                    setConnectedEntities(prev => prev.filter(e => e.id !== entity.id));
+                            {/* Attributes Section */}
+                            <Box sx={{ width: '90%' }}>
+                                <Typography variant="h4">Attributes:</Typography>
+                                <Stack spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                                    {attributes.map((attr, index) => (
+                                        <Stack
+                                            key={index}
+                                            direction="row"
+                                            spacing={1}
+                                            sx={{ width: 1 }}
+                                            alignItems="center"
+                                        >
+                                            <Typography variant="h5" sx={{ width: 20 }}>{index + 1}.</Typography>
+                                            <Checkbox
+                                                size="small"
+                                                checked={attr.isKey}
+                                                onChange={(e) => {
+                                                    const newAttrs = [...attributes];
+                                                    newAttrs[index].isKey = e.target.checked;
+                                                    setAttributes(newAttrs);
+                                                }}
+                                            />
+                                            <TextField
+                                                size="small"
+                                                label="Attribute Name"
+                                                value={attr.name}
+                                                onChange={(e) => {
+                                                    const newAttrs = [...attributes];
+                                                    newAttrs[index].name = e.target.value;
+                                                    setAttributes(newAttrs);
+                                                }}
+                                                sx={{ flexGrow: 1 }}
+                                            />
+                                            <IconButton
+                                                onClick={() =>
+                                                    setAttributes(attributes.filter((_, i) => i !== index))
                                                 }
-                                            }}>
-                                                <CloseIcon />
+                                                size="small"
+                                                sx={{ color: 'error.main' }}
+                                            >
+                                                <HighlightOffIcon />
                                             </IconButton>
                                         </Stack>
-                                    );
-                                })}
-                            </Stack>
-                        </Box>
-                    </Stack>
-                ) : (
-                    <Typography variant="h6" sx={{ textAlign: 'center', mt: 3 }}>
-                        Select an entity
-                    </Typography>
-                )}
+                                    ))}
+                                    <Button
+                                        fullWidth
+                                        variant="contained"
+                                        onClick={() =>
+                                            setAttributes([...attributes, { name: "New Attribute", isKey: false }])
+                                        }
+                                    >
+                                        + Add Attribute
+                                    </Button>
+                                </Stack>
+                            </Box>
+
+                            {/* Connections Section */}
+                            <Box sx={{ width: '90%' }}>
+                                <Typography variant="h4">Connections:</Typography>
+                                <Stack spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                                    {connectedEntities.length === 0 ? (
+                                        <Typography variant="body1">No connections</Typography>
+                                    ) : connectedEntities.map((entity, index) => {
+                                        const links = graph?.getConnectedLinks(selectedEntity!) || [];
+                                        const link = links.find(link => {
+                                            const sourceId = link.get('source')?.id;
+                                            const targetId = link.get('target')?.id;
+                                            return (
+                                                (sourceId === selectedEntity!.id && targetId === entity.id) ||
+                                                (sourceId === entity.id && targetId === selectedEntity!.id)
+                                            );
+                                        });
+
+                                        if (!link) return null;
+
+                                        const linkId = link.id;
+                                        const isSource = link.get('source')?.id === selectedEntity!.id;
+                                        const side: 'source' | 'target' = isSource ? 'source' : 'target';
+                                        const currentType = linkTypes[linkId]?.[side] || 'Zero or One';
+
+                                        return (
+                                            <Stack key={index} direction="row" spacing={1} sx={{ width: 1 }} alignItems="center">
+                                                <FormControl fullWidth>
+                                                    <Select
+                                                        value={currentType}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value;
+
+                                                            setLinkTypes(prev => ({
+                                                                ...prev,
+                                                                [link.id]: {
+                                                                    ...prev[link.id],
+                                                                    [side]: value
+                                                                }
+                                                            }));
+                                                        }}
+                                                        size="small"
+                                                    >
+                                                        {Object.keys(crowMarkers).map((opt, idx) => (
+                                                            <MenuItem key={idx} value={opt}>{opt}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                                <Typography sx={{ flexGrow: 1 }}>
+                                                    {entity.attr('headerText/text') || 'Unnamed Entity'}
+                                                </Typography>
+                                                <IconButton onClick={() => {
+                                                    const linkToRemove = graph?.getConnectedLinks(selectedEntity!)
+                                                        .find(link => {
+                                                            const sourceId = link.get('source')?.id;
+                                                            const targetId = link.get('target')?.id;
+                                                            return (
+                                                                (sourceId === selectedEntity!.id && targetId === entity.id) ||
+                                                                (sourceId === entity.id && targetId === selectedEntity!.id)
+                                                            );
+                                                        });
+                                                    if (linkToRemove) {
+                                                        linkToRemove.remove();
+                                                        refreshConnectedEntities();
+                                                        setConnectedEntities(prev => prev.filter(e => e.id !== entity.id));
+                                                    }
+                                                }}>
+                                                    <CloseIcon />
+                                                </IconButton>
+                                            </Stack>
+                                        );
+                                    })}
+                                </Stack>
+                            </Box>
+                        </Stack>
+                    ) : (
+                        <Typography variant="h6" sx={{ textAlign: 'center', mt: 3 }}>
+                            Select an entity
+                        </Typography>
+                    )}
                 </Box>
             </Paper>
 

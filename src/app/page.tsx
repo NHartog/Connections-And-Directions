@@ -123,7 +123,7 @@ export default function WelcomePage() {
     useEffect(() => {
         const interval = setInterval(() => {
             setActiveImages(prev => {
-                if (prev.length >= 0) { // adjust this cap as needed
+                if (prev.length >= 100) { // adjust this cap as needed
                     clearInterval(interval);
                     return prev;
                 }
