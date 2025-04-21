@@ -602,7 +602,7 @@ export default function Home() {
     // Create an anchor element and trigger download
     const a = document.createElement("a");
     a.href = url;
-    a.download = "diagram.json"; // File name
+    a.download = "diagram.chen"; // File name
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -617,6 +617,11 @@ export default function Home() {
 
     if (!file) return;
 
+    if (!file.name.endsWith('.chen')) {
+      alert("Invalid file type. Please upload a .crow file.");
+      return;
+    }
+
     const reader = new FileReader();
 
     reader.onload = (e) => {
@@ -625,6 +630,31 @@ export default function Home() {
         const json = JSON.parse(text); // Parse JSON
         if (graphRef.current) {
           graphRef.current.fromJSON(json)
+
+          if (paper) {
+            graphRef.current.getElements().forEach((element) => {
+              const boundaryTool = new elementTools.Boundary();
+              const removeButton = new elementTools.Remove({
+                useModelGeometry: true,
+                x: '10%',
+                y: '50%',
+              });
+              const connectTool = new elementTools.Connect({
+                useModelGeometry: true,
+                x: '90%',
+                y: '50%',
+              });
+
+              const toolsView = new dia.ToolsView({
+                name: 'basic-tools',
+                tools: [boundaryTool, removeButton, connectTool],
+              });
+
+              const view = element.findView(paper);
+              view.addTools(toolsView);
+              view.hideTools(); // Optional: tools only show on hover
+            });
+          }
         }
       } catch (error) {
         console.error("Error parsing JSON:", error);
@@ -1593,7 +1623,7 @@ export default function Home() {
         <Box sx={{ position: 'fixed', zIndex: 2, bottom: 16, right: 366 }}>
           <input
             type="file"
-            accept="application/json"
+            accept=".chen"
             ref={fileInputRef}
             onChange={handleImport}
             style={{ display: "none" }}

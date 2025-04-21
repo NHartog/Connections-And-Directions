@@ -825,7 +825,7 @@ export default function CrowsNotation() {
         const a = document.createElement("a");
 
         a.href = url;
-        a.download = "diagram.json";
+        a.download = "diagram.crow";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -835,6 +835,11 @@ export default function CrowsNotation() {
     const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !graph) return;
+
+        if (!file.name.endsWith('.crow')) {
+            alert("Invalid file type. Please upload a .crow file.");
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -927,7 +932,7 @@ export default function CrowsNotation() {
         <Stack direction="row" sx={{ width: 1, height: 1 }}>
             <input
                 type="file"
-                accept="application/json"
+                accept=".crow"
                 ref={fileInputRef}
                 onChange={handleImport}
                 style={{ display: "none" }}
