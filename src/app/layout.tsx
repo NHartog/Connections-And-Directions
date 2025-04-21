@@ -1,9 +1,13 @@
+'use client'
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Container, Stack } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, Stack } from '@mui/material';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
+import {useRouter} from "next/navigation";
+import HomeIcon from '@mui/icons-material/Home';
 import './globals.css'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
+    const router = useRouter();
     return (
         <html lang="en">
             <body style={{ margin: 0, padding: 0 }}>
@@ -15,11 +19,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                                     <Typography variant="h6" sx={{ color: '#003366' }}>
                                         Connections & Directions
                                     </Typography>
-                                    {/*<Button sx={{*/}
-                                    {/*    color: '#fff',*/}
-                                    {/*    backgroundColor: '#003366',*/}
-                                    {/*    '&:hover': { backgroundColor: '#001f4d' }*/}
-                                    {/*}}>LOGIN</Button>*/}
+                                    <Button
+                                        onClick={() => router.push('/')}
+                                        startIcon={<HomeIcon />}
+                                        sx={{
+                                            color: '#fff',
+                                            backgroundColor: '#003366',
+                                            '&:hover': { backgroundColor: '#001f4d' }
+                                        }}
+                                    >
+                                        Home
+                                    </Button>
                                 </Stack>
                             </Toolbar>
                         </AppBar>

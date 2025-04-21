@@ -8,7 +8,7 @@ import {
     Paper,
     Select,
     Stack,
-    MenuItem, Checkbox, Tooltip, Popover, FormControl, InputLabel
+    MenuItem, Checkbox, Tooltip, Popover, FormControl, InputLabel, ButtonGroup
 } from '@mui/material';
 import { dia, shapes, elementTools, highlighters, util } from '@joint/core';
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,6 +22,11 @@ import SaveIcon from '@mui/icons-material/Save';
 import { AvoidRouter } from './avoid-router';
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import RectangleIcon from "@mui/icons-material/Rectangle";
+import HexagonIcon from "@mui/icons-material/Hexagon";
+import CircleIcon from "@mui/icons-material/Circle";
+import ImageIcon from "@mui/icons-material/Image";
+import DescriptionIcon from "@mui/icons-material/Description";
 
 
 
@@ -43,17 +48,28 @@ class SelectionManager {
     private initialPositions: Map<string, { x: number; y: number }> = new Map();
     private dragOffset: { x: number; y: number } | null = null;
     private anchorElementId: string | null = null;
+    private selectionStart: { x: number; y: number } | null = null;
 
     constructor(private paper: dia.Paper, private graph: dia.Graph) {
         this.initEvents();
     }
 
     private initEvents() {
-        this.paper.on('blank:pointerdown', (evt, x, y) => this.startSelectionBox(evt, x, y));
+
+        this.paper.on('blank:pointerdown', (evt, x, y) =>{
+            const isCtrlHeld = (evt.originalEvent as MouseEvent).ctrlKey || (evt.originalEvent as MouseEvent).metaKey;
+            if (isCtrlHeld) return;
+            this.startSelectionBox(evt, x, y);
+        });
+
         this.paper.on('blank:pointerup', () => this.endSelectionBox());
         this.paper.on('blank:pointermove', (_, x, y) => this.updateSelectionBox(x, y));
 
-        this.paper.on('element:pointerdown', (elementView, evt) => this.startDrag(elementView, evt));
+        this.paper.on('element:pointerdown', (elementView, evt) => {
+            const isCtrlHeld = (evt.originalEvent as MouseEvent).ctrlKey || (evt.originalEvent as MouseEvent).metaKey;
+            if (isCtrlHeld) return;
+            this.startDrag(elementView, evt);
+        });
         this.paper.on('element:pointermove', (_, __, x, y) => this.dragSelected(x, y));
         this.paper.on('element:pointerup', () => this.endDrag());
     }
@@ -62,37 +78,53 @@ class SelectionManager {
         if ((evt.originalEvent as MouseEvent).button !== 0) return;
         this.clearSelection();
 
+        this.selectionStart = { x, y };
+
         const box = new shapes.standard.Rectangle();
         box.position(x, y);
         box.resize(1, 1);
         box.id = "selectionBBOXElement";
-        box.attr({ body: { fill: 'rgba(0, 0, 255, 0.1)', stroke: 'blue', strokeDasharray: '5,5' } });
+        box.attr({
+            body: {
+                fill: 'rgba(0, 0, 255, 0.1)',
+                stroke: 'blue',
+                strokeDasharray: '5,5'
+            }
+        });
         box.addTo(this.graph);
         this.selectionBox = box;
         this.isDragging = true;
     }
 
     private updateSelectionBox(x: number, y: number) {
-        if (!this.isDragging || !this.selectionBox) return;
-        const start = this.selectionBox.position();
-        const width = Math.abs(x - start.x);
-        const height = Math.abs(y - start.y);
-        const newX = Math.min(x, start.x);
-        const newY = Math.min(y, start.y);
+        if (!this.isDragging || !this.selectionBox || !this.selectionStart) return;
+
+        const startX = this.selectionStart.x;
+        const startY = this.selectionStart.y;
+
+        const width = Math.abs(x - startX);
+        const height = Math.abs(y - startY);
+
+        const newX = Math.min(startX, x);
+        const newY = Math.min(startY, y);
+
         this.selectionBox.resize(width, height);
         this.selectionBox.position(newX, newY);
     }
 
     private endSelectionBox() {
         if (!this.selectionBox) return;
+
         const bbox = this.selectionBox.getBBox();
         this.graph.getElements().forEach(el => {
             if (el.id !== "selectionBBOXElement" && bbox.containsRect(el.getBBox())) {
                 this.add(el);
             }
         });
+
         this.selectionBox.remove();
         this.selectionBox = null;
+        this.selectionStart = null;
         this.isDragging = false;
     }
 
@@ -262,7 +294,7 @@ export default function CrowsNotation() {
             }
 
             if (e.key === 'Control' || e.metaKey) {
-                setPanningEnabled(false);
+                setPanningEnabled(true);
             }
 
             const isTextInput =
@@ -278,7 +310,7 @@ export default function CrowsNotation() {
                 document.body.style.cursor = 'auto';
             }
             if (e.key === 'Control' || !e.ctrlKey) {
-                setPanningEnabled(true);
+                setPanningEnabled(false);
             }
         };
 
@@ -396,37 +428,27 @@ export default function CrowsNotation() {
         });
 
         paper.on('element:pointerclick', (elementView, evt) => {
-            const element = elementView.model;
-            const isCtrlHeld = (evt.originalEvent as MouseEvent).ctrlKey || (evt.originalEvent as MouseEvent).metaKey;
-
-            if (isCtrlHeld) {
-                // CTRL+Click toggles selection
-                selectionManager?.toggle(element);
-                setSelectedEntity(null); // Clear sidebar
-                setEntityName('');
-                setAttributes([]);
-            } else {
-                // Normal click behavior
-                selectionManager?.clearSelection();
-                selectionManager?.add(element);
-                if (!isCtrlHeld && selectionManager?.getSelected().length === 1) {
-                    setSelectedEntity(element); // ✅ ensure it's tracked
-                }
-
-                setSelectedEntity(element);
-                setEntityName(element.attr('headerText/text') || "");
-                const rawAttrs: string[] = element.attr('bodyText/text')?.split('\n') || [];
-                setAttributes(rawAttrs.map(attr => ({
-                    name: attr.replace(/^\*\s*/, ''),
-                    isKey: attr.startsWith('* ')
-                })));
-
-                highlighters.mask.removeAll(paper);
-                highlighters.mask.add(elementView, { selector: 'root' }, 'selection-highlight', {
-                    deep: true,
-                    attrs: { stroke: '#FF4365', 'stroke-width': 3 }
-                });
+            if ((evt.originalEvent as MouseEvent).ctrlKey || (evt.originalEvent as MouseEvent).metaKey) {
+                return;
             }
+
+            const element = elementView.model;
+            selectionManager?.clearSelection();
+            selectionManager?.add(element);
+
+            setSelectedEntity(element);
+            setEntityName(element.attr('headerText/text') || "");
+            const rawAttrs: string[] = element.attr('bodyText/text')?.split('\n') || [];
+            setAttributes(rawAttrs.map(attr => ({
+                name: attr.replace(/^\*\s*/, ''),
+                isKey: attr.startsWith('* ')
+            })));
+
+            highlighters.mask.removeAll(paper);
+            highlighters.mask.add(elementView, { selector: 'root' }, 'selection-highlight', {
+                deep: true,
+                attrs: { stroke: '#FF4365', 'stroke-width': 3 }
+            });
         });
 
         paper.on('blank:pointerclick', () => {
@@ -911,21 +933,27 @@ export default function CrowsNotation() {
                 style={{ display: "none" }}
             />
             <Box sx={{ width: 'calc(100% - 350px)', height: '100%' }}>
-                <Box sx={{ position: 'fixed', zIndex: 2 }}>
-                    <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
-                    <Button variant="contained" onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
-                    <Button variant="contained" onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
-                    <Button variant="contained" onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
-
-
-                </Box>
+                <ButtonGroup variant="contained" sx={{ boxShadow: 5, position: 'fixed', zIndex: 2, m: 1 }}>
+                    <Tooltip title="Zoom In">
+                        <Button onClick={() => transformWrapperRef.current?.zoomIn()}>+</Button>
+                    </Tooltip>
+                    <Tooltip title="Zoom Out">
+                        <Button onClick={() => transformWrapperRef.current?.zoomOut()}>-</Button>
+                    </Tooltip>
+                    <Tooltip title="Reset">
+                        <Button onClick={() => transformWrapperRef.current?.resetTransform()}>x</Button>
+                    </Tooltip>
+                    <Tooltip title="Center">
+                        <Button onClick={() => transformWrapperRef.current?.centerView()}>o</Button>
+                    </Tooltip>
+                </ButtonGroup>
                 <Box sx={{ width: '100%', height: '100%' }} ref={boxWrapperRef}>
                     <TransformWrapper
                         centerOnInit={true}
                         initialPositionX={-width / 2 + (boxWrapperRef.current?.clientWidth || 0) / 2}
                         initialPositionY={-height / 2 + (boxWrapperRef.current?.clientHeight || 0) / 2}
                         doubleClick={{ mode: 'toggle' }}
-                        panning={{ disabled: !panningEnabled }}
+                        panning={{ disabled: !panningEnabled  }}
                         ref={transformWrapperRef}
                     >
                         <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
@@ -948,6 +976,20 @@ export default function CrowsNotation() {
                                         return;
                                     }
 
+                                    const isMiddleMouse = e.button === 1;
+                                    const isCtrl = e.ctrlKey || e.metaKey;
+
+                                    if (isMiddleMouse || isCtrl) {
+                                        setPanningEnabled(true);
+                                    } else {
+                                        setPanningEnabled(false);
+                                    }
+
+                                    // Optional: disable selecting elements while panning
+                                    if (isMiddleMouse || e.ctrlKey) {
+                                        e.preventDefault(); // prevents unwanted browser behavior
+                                    }
+
 
                                     if (target.closest('.joint-element')) {
                                         setPanningEnabled(false);
@@ -959,7 +1001,7 @@ export default function CrowsNotation() {
                                         setPanningEnabled(false);
                                     }
                                 }}
-                                onMouseUp={() => setPanningEnabled(true)}
+                                onMouseUp={() => setPanningEnabled(false)}
                             />
                         </TransformComponent>
                     </TransformWrapper>
@@ -967,7 +1009,7 @@ export default function CrowsNotation() {
                 <Box sx={{ position: 'fixed', bottom: 16, right: 365, zIndex: 2 }}>
                     <SpeedDial
                         ariaLabel="Import/Export Diagram"
-                        icon={<SaveIcon />}
+                        icon={<DescriptionIcon />}
                     >
                         <SpeedDialAction
                             icon={<SaveIcon />}
@@ -980,7 +1022,7 @@ export default function CrowsNotation() {
                             onClick={triggerFileDialog}
                         />
                         <SpeedDialAction
-                            icon={<svg xmlns="http://www.w3.org/2000/svg" height="24" width="24"><text x="3" y="17" fontSize="14">SVG</text></svg>}
+                            icon={<ImageIcon/>}
                             tooltipTitle="Export as SVG"
                             onClick={handleExportSVG}
                         />
@@ -1012,18 +1054,42 @@ export default function CrowsNotation() {
                     anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                     transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 >
-                    <Box sx={{ px: 2, py: 1, maxWidth: 300 }}>
-                        <Typography variant="h6" gutterBottom>Help Guide</Typography>
-                        <Typography variant="body2"><b>Zoom:</b> + and -</Typography>
-                        <Typography variant="body2"><b>Reset:</b> x</Typography>
-                        <Typography variant="body2"><b>Center:</b> o</Typography>
-                        <Typography variant="body2" sx={{ mt: 1 }}><b>Tips:</b></Typography>
-                        <ul style={{ paddingLeft: 16, marginTop: 4 }}>
-                            <li><Typography variant="body2">Add entities and attributes</Typography></li>
-                            <li><Typography variant="body2">Drag from the arrow to create links</Typography></li>
-                            <li><Typography variant="body2">Use checkboxes to mark key attributes</Typography></li>
+                    <Typography sx={{ px: 2, maxWidth: 400 }} component="div">
+                        <Typography variant="h6" gutterBottom fontWeight="bold">
+                            💡 Help Guide
+                        </Typography>
+
+                        <Typography variant="body2" gutterBottom><strong>Canvas Controls</strong></Typography>
+                        <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                            <li><b>Ctrl + Drag</b> or <b>Middle Click</b>: Pan the canvas</li>
+                            <li><b>Scroll Wheel</b>: Zoom in/out</li>
+                            <li><b>Click + Drag</b>: Multi-select entities</li>
+                            <li><b>Click Entity</b>: Open configuration panel</li>
                         </ul>
-                    </Box>
+
+                        <Typography variant="body2" gutterBottom><strong>Top Canvas Buttons</strong></Typography>
+                        <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                            <li>+ <b>Zoom In</b>: Increase zoom level</li>
+                            <li>- <b>Zoom Out</b>: Decrease zoom level</li>
+                            <li>X <b>Reset Zoom</b>: Return to 100% scale</li>
+                            <li>O <b>Center View</b>: Fit diagram to screen</li>
+                        </ul>
+
+                        <Typography variant="body2" gutterBottom><strong>Import / Export (SpeedDial)</strong></Typography>
+                        <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                            <li><ImageIcon></ImageIcon> <b>Export JSON</b>: Save your diagram data</li>
+                            <li><FileUploadIcon /> <b>Import JSON</b>: Load a previous diagram</li>
+                            <li><SaveIcon /> <b>Export SVG</b>: Download a clean image</li>
+                        </ul>
+
+
+                        <Typography variant="body2" gutterBottom><strong>Shortcuts</strong></Typography>
+                        <ul style={{marginTop: 0, paddingLeft: 20}}>
+                            <li><b>Delete</b>: Remove selected items</li>
+                            <li><b>Ctrl + Click:</b> Pan mode </li>
+                            <li><b>Shift Click</b>: Add new Entity</li>
+                        </ul>
+                    </Typography>
                 </Popover>
             </Box>
             <Paper elevation={3} sx={{ height: '100%', width: '350px', overflowY: 'auto' }}>

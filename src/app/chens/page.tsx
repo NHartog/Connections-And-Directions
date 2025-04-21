@@ -14,6 +14,7 @@ import CircleIcon from '@mui/icons-material/Circle';
 import RectangleIcon from '@mui/icons-material/Rectangle';
 import HexagonIcon from '@mui/icons-material/Hexagon';
 import ShapeLineIcon from '@mui/icons-material/ShapeLine';
+import ImageIcon from '@mui/icons-material/Image';
 import React from "react";
 
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
@@ -138,7 +139,11 @@ export default function Home() {
 
     private initEvents() {
       // Rubberband selection start
-      this.paper.on('blank:pointerdown', (event, x, y) => this.startSelectionDragging(event, x, y));
+      this.paper.on('blank:pointerdown', (event, x, y) =>{
+        const isCtrlHeld = (event.originalEvent as MouseEvent).ctrlKey || (event.originalEvent as MouseEvent).metaKey;
+        if (isCtrlHeld) return;
+        this.startSelectionDragging(event, x, y);
+      });
 
       // Rubberband selection end
       this.paper.on('blank:pointerup', () => this.stopSelectionDragging());
@@ -1055,7 +1060,14 @@ export default function Home() {
     if (selectedElement) {
       setElementConfigurationUI(getElementConfigurationUI(selectedElement))
     } else {
-      setElementConfigurationUI(<></>)
+      setElementConfigurationUI(
+          <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}
+          >
+            <Typography variant="h6" sx={{ textAlign: 'center', mt: 3 }}>
+              Select an entity
+            </Typography>
+          </Box>
+      )
     }
   }, [selectedElement, connectedElements])
 
@@ -1534,26 +1546,46 @@ export default function Home() {
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
             <Typography sx={{ px: 2, maxWidth: 400 }} component="div">
-              <h3>Help Guide</h3>
-              <p><b>Zooming:</b> You can zoom in and out using the <i>+</i> and <i>-</i> buttons, or reset zoom with the <i>Reset</i> button.</p>
-              <p><b>Panning:</b> Hold down your mouse wheel while dragging to move the entire diagram.</p>
-              <p><b>Element Actions (Right click or speed dial):</b></p>
-              <ul>
-                <li><b>Attribute:</b> Add a new attribute element.</li>
-                <li><b>Entity:</b> Add a new entity element.</li>
-                <li><b>Relationship:</b> Add a new relationship element.</li>
+              <Typography variant="h6" gutterBottom fontWeight="bold">
+                💡 Help Guide
+              </Typography>
+
+              <Typography variant="body2" gutterBottom><strong>Canvas Controls</strong></Typography>
+              <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                <li><b>Ctrl + Drag</b> or <b>Middle Click</b>: Pan the canvas</li>
+                <li><b>Scroll Wheel</b>: Zoom in/out</li>
+                <li><b>Click + Drag</b>: Multi-select entities</li>
+                <li><b>Click Entity</b>: Open configuration panel</li>
               </ul>
-              <p><b>Element Selection:</b> Click and drag to select multiple elements.</p>
-              <ul>
-                <li>You can move selected elements by dragging them together.</li>
-                <li>You can use <b>Shift</b> to multi-select.</li>
-                <li>Hitting <b>Delete</b> or <b>Backspace</b> will delete the selected elements</li>
-                <li>Hitting <b>Escape</b> will clear the selection</li>
+
+              <Typography variant="body2" gutterBottom><strong>Top Canvas Buttons</strong></Typography>
+              <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                <li>+ <b>Zoom In</b>: Increase zoom level</li>
+                <li>- <b>Zoom Out</b>: Decrease zoom level</li>
+                <li>X <b>Reset Zoom</b>: Return to 100% scale</li>
+                <li>O <b>Center View</b>: Fit diagram to screen</li>
               </ul>
-              <p><b>File Operations:</b></p>
-              <ul>
-                <li><b>Save:</b> Save the current diagram as a JSON file.</li>
-                <li><b>Import:</b> Import a diagram by uploading a JSON file.</li>
+
+              <Typography variant="body2" gutterBottom><strong>Add Shape (SpeedDial)</strong></Typography>
+              <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                <li><RectangleIcon /> <b>Add Entity</b></li>
+                <li><HexagonIcon /> <b>Add Relationship</b></li>
+                <li><CircleIcon /> <b>Add Relationship</b></li>
+              </ul>
+
+              <Typography variant="body2" gutterBottom><strong>Import / Export (SpeedDial)</strong></Typography>
+              <ul style={{ marginTop: 0, marginBottom: 12, paddingLeft: 20 }}>
+                <li><ImageIcon></ImageIcon> <b>Export JSON</b>: Save your diagram data</li>
+                <li><FileUploadIcon /> <b>Import JSON</b>: Load a previous diagram</li>
+                <li><SaveIcon /> <b>Export SVG</b>: Download a clean image</li>
+              </ul>
+
+
+              <Typography variant="body2" gutterBottom><strong>Shortcuts</strong></Typography>
+              <ul style={{marginTop: 0, paddingLeft: 20}}>
+                <li><b>Delete</b>: Remove selected items</li>
+                <li><b>Ctrl + Click:</b> Pan mode </li>
+                <li><b>Right Click</b>: Add new Entity/Attribute/Relationship</li>
               </ul>
             </Typography>
           </Popover>
@@ -1602,7 +1634,7 @@ export default function Home() {
                 onClick={onImport}
               />
               <SpeedDialAction
-                  icon={<svg xmlns="http://www.w3.org/2000/svg" height="24" width="24"><text x="3" y="17" fontSize="14">SVG</text></svg>}
+                  icon={<ImageIcon/>}
                   tooltipTitle="Export as SVG"
                   onClick={handleExportSVG}
               />
@@ -1630,6 +1662,13 @@ export default function Home() {
                     setShowSelectionWheel(false)
                   }
                   const target = e.target as HTMLElement;
+                  const isCtrlHeld = e.ctrlKey || e.metaKey;
+                  const isMiddleClick = e.button === 1;
+
+                  if (isCtrlHeld || isMiddleClick) {
+                    setPanningEnabled(true);
+                    return;
+                  }
 
                   // Check if clicking an element
                   if (target.closest('.joint-element')) {
@@ -1648,7 +1687,7 @@ export default function Home() {
                     setPanningEnabled(false);
                   }
                 }}
-                onMouseUp={() => setPanningEnabled(true)}
+                onMouseUp={() => setPanningEnabled(false)}
               />
             </TransformComponent>
           </TransformWrapper>

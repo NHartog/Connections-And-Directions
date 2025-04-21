@@ -24,6 +24,14 @@ const floatImages = [
 ];
 
 
+const chensDescription = `Chen’s notation uses entities, attributes, and relationships to model data.
+It’s highly readable and often used in academic settings. It’s ideal for representing conceptual models
+where relationships and entity properties are equally important.`;
+
+const crowsDescription = `Crow’s Foot notation is popular for relational database design.
+It uses line-end markers to clearly define cardinality (one-to-one, one-to-many, etc.).
+This notation is especially effective for logical/physical database models.`;
+
 const getRandom = (min: number, max: number) => Math.random() * (max - min) + min;
 
 const FloatingImage = ({
@@ -65,10 +73,12 @@ const DiagramBox = ({
     title,
     description,
     route,
+    image
 }: {
     title: string;
     description: string;
     route: string;
+    image?: string;
 }) => {
     const [hovered, setHovered] = useState(false);
     const router = useRouter();
@@ -100,8 +110,16 @@ const DiagramBox = ({
 
             {/* Smooth expansion via Collapse */}
             <Collapse in={hovered} timeout={300}>
-                <Box sx={{ mt: 1 }}>
-                    <Typography sx={{ mb: 1 }}>{description}</Typography>
+                <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {image && (
+                        <Box
+                            component="img"
+                            src={image}
+                            alt={title}
+                            sx={{ maxWidth: '80%', maxHeight: 100, mb: 2, objectFit: 'contain' }}
+                        />
+                    )}
+                    <Typography sx={{ mb: 1, textAlign: 'center' }}>{description}</Typography>
                     <Button
                         variant="contained"
                         color="primary"
@@ -160,24 +178,23 @@ export default function WelcomePage() {
                                     <Typography>
                                         Connections & Directions is a free diagramming website that allows students to create ERD diagrams using Chen's and Crow's foot notation. Created by Nicholas Hartog and Sebastian Paulis, we guarantee the diagrams are accurate to their notation style for academic use by professors. Freely hosted on Firebase, anyone can use this service without any fear.
                                     </Typography>
-                                    <Button variant="contained" color="primary" sx={{ mt: 2 }} onClick={handleEnterClick}>
-                                        Enter
-                                    </Button>
                                 </Stack>
                             </Paper>
                         </Grid>
                         <Grid size={6} minHeight={200}>
                             <DiagramBox
                                 title="Chen's Notation"
-                                description="Chen’s notation uses entities, attributes, and relationships to model data. It’s highly readable and often used in academic settings."
+                                description= {chensDescription}
                                 route="/chens"
+                                image="/diagram_imgs/chens.svg"
                             />
                         </Grid>
                         <Grid size={6} minHeight={200}>
                             <DiagramBox
                                 title="Crow's Foot Notation"
-                                description="Crow’s Foot notation is popular for relational database design and uses symbols to denote cardinality and relationship types."
+                                description={crowsDescription}
                                 route="/crows"
+                                image="/diagram_imgs/crows.svg"
                             />
                         </Grid>
                     </Grid>
